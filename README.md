@@ -1,117 +1,130 @@
-# 🔐 SecAgent — NVIDIA NIM / Nemotron Cybersecurity AI Agent
+# 🔐 SecAgent — Web Interface
+### NVIDIA NIM · Nemotron 3 Nano · BeaverHacks 2026
 
-Powered by **NVIDIA NIM API** using the **Nemotron** model family.
-Uses the OpenAI-compatible endpoint at `https://integrate.api.nvidia.com/v1`.
+Full-stack cybersecurity vulnerability scanner with a live streaming web UI.
+
+```
+nemotron-vm-fix-agent/
+├── backend/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── scanner.py
+│   │   ├── findings.py
+│   │   ├── llm.py
+│   │   ├── fixer.py
+│   │   ├── verifier.py
+│   │   ├── audit.py
+│   │   ├── report.py
+│   │   ├── state.py
+│   │   └── templates/
+│   │       └── dashboard.html
+│   ├── requirements.txt
+│   └── run_pipeline.py
+├── vm_lab/
+│   ├── ubuntu_setup.md
+│   ├── nginx_vulnerable_site.conf
+│   ├── security_headers.safe.conf
+│   ├── windows_verification.md
+│   └── reset_lab.md
+├── reports/
+│   └── .gitkeep
+├── audit_logs/
+│   └── .gitkeep
+├── .env.example
+├── .gitignore
+├── README.md
+└── DEMO_SCRIPT.md
+```
 
 ---
 
-## What It Detects
+## Stack
 
-| Vulnerability        | Example                                          |
-|----------------------|--------------------------------------------------|
-| SQL Injection         | `"SELECT * FROM users WHERE id = " + input`     |
-| XSS                  | `"<div>" + user_input + "</div>"`               |
-| Buffer Overflow      | Fixed-size buffer with no bounds check           |
-| Hardcoded Secrets    | `API_KEY = "sk-prod-abc123..."`                 |
+| Layer    | Tech                                      |
+|----------|-------------------------------------------|
+| Model    | NVIDIA NIM — Nemotron 3 Nano 30B-A3B      |
+| Backend  | FastAPI + Uvicorn (Python)                |
+| Frontend | Vanilla HTML/CSS/JS (zero dependencies)   |
+| Streaming| Server-Sent Events (SSE)                  |
 
 ---
 
 ## Setup
 
+### 1. Backend
+
 ```bash
-# 1. Install dependencies (just the OpenAI SDK — that's all you need)
+cd backend
 pip install -r requirements.txt
 
-# 2. Get a free NVIDIA API key at https://build.nvidia.com
-#    New accounts get 1,000 free inference credits
+export NVIDIA_API_KEY="nvapi-xxxxxxxxxxxx"
 
-# 3. Export your key
-export NVIDIA_API_KEY="nvapi-xxxxxxxxxxxxxxxxxxxx"
+uvicorn main:app --reload --port 8000
 ```
 
----
+Backend runs at `http://localhost:8000`
+API docs at `http://localhost:8000/docs`
 
-## Usage
+### 2. Frontend
+
+Just open the file in your browser — no build step needed:
 
 ```bash
-# Scan a specific file
-python security_agent.py --file yourcode.py
+open frontend/index.html
+# or on Windows:
+start frontend/index.html
+```
 
-# Run built-in demo (intentionally vulnerable code)
-python security_agent.py --demo
-
-# Scan + generate report
-python security_agent.py --file app.py --report
-
-# Scan + auto-apply patches
-python security_agent.py --file app.py --patch
-
-# Everything at once
-python security_agent.py --file app.py --report --patch
-
-# Use a different Nemotron model
-python security_agent.py --file app.py --model nvidia/nemotron-4-340b-instruct
-
-# Save report to specific path
-python security_agent.py --file app.py --report --output my_report.txt
+Or serve it with Python:
+```bash
+cd frontend
+python -m http.server 3000
+# then open http://localhost:3000
 ```
 
 ---
 
-## Available Nemotron Models
+## Web API Endpoints
 
-| Model ID                                        | Notes                        |
-|-------------------------------------------------|------------------------------|
-| `nvidia/nemotron-3-nano-30b-a3b`                | **Default — your key** ✅    |
-| `nvidia/llama-3.1-nemotron-70b-instruct`        | Fast + accurate              |
-| `nvidia/llama-3.1-nemotron-ultra-253b-v1`       | Best reasoning, slower       |
-| `nvidia/nemotron-4-340b-instruct`               | Flagship 340B model          |
+| Method | Endpoint        | Description                            |
+|--------|-----------------|----------------------------------------|
+| GET    | `/health`       | Check server status                    |
+| POST   | `/scan/stream`  | Scan code with live SSE token stream   |
+| POST   | `/scan`         | Scan code, return full JSON result     |
+| POST   | `/scan/upload`  | Upload a file and scan it              |
+| POST   | `/report`       | Scan + return downloadable .txt report |
 
-Switch with: `--model nvidia/nemotron-4-340b-instruct`
-
----
-
-## Output Per Vulnerability
-
-- **ID** — VULN-001, VULN-002, ...
-- **Type** — SQL_INJECTION, XSS, BUFFER_OVERFLOW, HARDCODED_SECRET
-- **Severity** — CRITICAL / HIGH / MEDIUM / LOW
-- **Line numbers** — where the bug lives
-- **Vulnerable code** — exact snippet
-- **Description** — why it's dangerous and how attackers exploit it
-- **Impact** — real-world damage
-- **CVE references** — related CVEs
-- **CWE ID** — weakness classification
-- **Auto-patch** — fixed version of the code
-- **Fix explanation** — what the fix does and why it works
-
----
-
-## How It Works
-
-```
-security_agent.py
-│
-├── SecurityAgent.__init__()
-│   └── openai.OpenAI(base_url="https://integrate.api.nvidia.com/v1")
-│
-├── scan_code()
-│   ├── Sends code + system prompt to NIM streaming API
-│   ├── Strips <think>...</think> reasoning traces (Nemotron-specific)
-│   └── Parses JSON vulnerability report from model response
-│
-├── display_results()  — color-coded terminal output + risk bar
-├── generate_report()  — saves timestamped .txt report
-└── apply_patches()    — replaces vulnerable snippets in source file
+### Example request:
+```bash
+curl -X POST http://localhost:8000/scan \
+  -H "Content-Type: application/json" \
+  -d '{"code": "query = \"SELECT * FROM users WHERE id = \" + user_id", "filename": "app.py"}'
 ```
 
-The agent uses `temperature=0.1` for deterministic, accurate security analysis and streams tokens so you get live feedback during long scans.
+---
+
+## Features
+
+- **Paste code** directly in the browser editor
+- **Upload a file** (.py .js .ts .c .cpp .php .rb .go .java .cs)
+- **Live streaming output** — watch Nemotron think in real time
+- **Download report** as a formatted .txt file
+- **Model switcher** — Nano 30B, 70B, or 340B
+- **Collapsible vuln cards** with vulnerable code, patches, CVEs, CWE IDs
+- **Risk score meter** with severity breakdown
 
 ---
 
-## Notes
+## Deployment
 
-- The `<think>...</think>` traces some Nemotron models emit are automatically stripped before JSON parsing
-- `--patch` does direct string replacement — works great for isolated snippets, complex cases may need manual review
-- Reports are timestamped so you can track scan history over time
-- Free NIM tier gives you 1,000 credits (~40 req/min rate limit)
+To deploy publicly (e.g. for a hackathon demo):
+
+```bash
+# Backend on a server
+uvicorn main:app --host 0.0.0.0 --port 8000
+
+# Update BACKEND in index.html line 1 to your server IP/domain:
+# const BACKEND = "https://your-server.com";
+```
+
+Free options: Railway, Render, Fly.io all support FastAPI with one config file.
