@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nemotron Security Triage Agent</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+
+  <style>
+    /* Global custom styles placeholder for later modules */
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div id="landing-view" class="min-h-screen"></div>
+
+  <div id="dashboard-view" class="hidden min-h-screen flex flex-col"></div>
+
+  <div
+    id="history-drawer"
+    class="fixed top-0 right-0 h-full w-80 bg-slate-900 border-l border-slate-800 transform translate-x-full transition-transform duration-300 z-50"
+  ></div>
+
+  <script>
+    const appState = {
+      currentScanId: null,
+      currentScanData: null,
+      selectedFindingId: null,
+      activeTab: "details",
+      pipelineState: null,
+      scanHistory: [],
+      auditEvents: [],
+      isHistoryDrawerOpen: false,
+      isAuditLogVisible: true,
+      isPolling: false,
+      pollingIntervalId: null,
+      currentView: "landing",
+    };
+
+    const MOCK = {
+      health: { status: "ok" },
+
+      scanStartResponse: {
+        scan_id: "mock_scan_001",
+        status: "started",
+      },
+
+      fullScan: {
+        scan_id: "mock_scan_001",
+        target: "192.168.136.128",
+        started_at: "2026-05-02T23:35:00Z",
+        completed_at: "2026-05-02T23:35:46Z",
+        duration_ms: 46730,
+        summary: {
+          total_findings: 4,
+          by_severity: { critical: 0, high: 1, medium: 2, low: 1 },
+          headline:
+            "Found 4 security issues on 192.168.136.128. 1 high-priority issue requires immediate attention.",
+        },
+        findings: [
+          {
+            id: "FINDING-001",
+            title: "Anonymous FTP login enabled",
+            severity: "high",
+            evidence:
+              "anonymous user can access ftp://192.168.136.128/pub/README.txt",
+            risk:
+              "Unauthorized users may enumerate or retrieve files from the FTP service. This exposes potentially sensitive content to anyone on the network.",
+            recommendation:
+              "Disable anonymous_enable in /etc/vsftpd.conf, or restrict FTP access via firewall rules.",
+            next_steps:
+              "Investigate the /pub directory contents to assess if sensitive files are exposed. Check FTP logs for prior anonymous access patterns.",
+          },
+          {
+            id: "FINDING-002",
+            title: "Wildcard CORS policy",
+            severity: "medium",
+            evidence:
+              "Access-Control-Allow-Origin: * (on http://192.168.136.128:8088)",
+            risk:
+              "Any external website can read responses from this server, which may leak data when authenticated sessions exist.",
+            recommendation:
+              'Replace wildcard with explicit origin allowlist in nginx config (add_header Access-Control-Allow-Origin "https://trusted.example.com").',
+            next_steps:
+              "Identify all legitimate origins that need cross-origin access. Audit other services for similar misconfiguration.",
+          },
+          {
+            id: "FINDING-003",
+            title: "Missing Content-Security-Policy header",
+            severity: "medium",
+            evidence:
+              "HTTP response from http://192.168.136.128:8088 lacks Content-Security-Policy header",
+            risk:
+              "Browser-side protections against XSS and content injection are weakened.",
+            recommendation:
+              "Add a Content-Security-Policy header in nginx config (e.g. default-src 'self').",
+            next_steps:
+              "Audit application for inline scripts and external resources before tightening CSP.",
+          },
+          {
+            id: "FINDING-004",
+            title: "Plaintext SMTP service exposed",
+            severity: "low",
+            evidence:
+              "Port 25/tcp open with tcpwrapped service on 192.168.136.128",
+            risk:
+              "SMTP without TLS may leak credentials and email content if used.",
+            recommendation:
+              "If SMTP is required, configure STARTTLS. Otherwise close port 25 via firewall.",
+            next_steps:
+              "Determine whether port 25 is intentionally open. Review mail relay configuration.",
+          },
+        ],
+        raw_scan_output: `Starting Nmap 7.80 ( https://nmap.org ) at 2026-05-02 23:35 UTC
+Nmap scan report for 192.168.136.128
+Host is up (0.00068s latency).
+Not shown: 994 filtered ports
+PORT     STATE SERVICE    VERSION
+21/tcp   open  ftp        vsftpd 3.0.5
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+|_drwxr-xr-x    2 65534    65534        4096 May 02 23:32 pub
+22/tcp   open  ssh        OpenSSH 8.9p1 Ubuntu 3ubuntu0.15
+25/tcp   open  tcpwrapped
+110/tcp  open  tcpwrapped
+143/tcp  open  tcpwrapped
+8088/tcp open  http       nginx 1.29.8
+|_http-server-header: nginx/1.29.8
+|_http-title: Nemotron Local Fix Agent Demo
+Service Info: OSs: Unix, Linux
+
+Nmap done: 1 IP address (1 host up) scanned in 46.73 seconds`,
+      },
+
+      history: [
+        {
+          scan_id: "mock_scan_001",
+          target: "192.168.136.128",
+          started_at: "2026-05-02T23:35:00Z",
+          finding_count: 4,
+          highest_severity: "high",
+        },
+        {
+          scan_id: "mock_scan_000",
+          target: "192.168.136.128",
+          started_at: "2026-05-02T23:27:11Z",
+          finding_count: 3,
+          highest_severity: "medium",
+        },
+      ],
+
+      auditLog: [
+        {
+          timestamp: "2026-05-02T23:35:00.120Z",
+          event_type: "scan_started",
+          scan_id: "mock_scan_001",
+          details: "Target: 192.168.136.128",
+        },
+        {
+          timestamp: "2026-05-02T23:35:25.520Z",
+          event_type: "network_scan_completed",
+          scan_id: "mock_scan_001",
+          details: "Found 6 open ports",
+        },
+        {
+          timestamp: "2026-05-02T23:35:40.820Z",
+          event_type: "service_detection_completed",
+          scan_id: "mock_scan_001",
+          details: "Detected services: ftp, ssh, http, tcpwrapped",
+        },
+        {
+          timestamp: "2026-05-02T23:35:42.000Z",
+          event_type: "nemotron_called",
+          scan_id: "mock_scan_001",
+          details: "Calling Nemotron model",
+        },
+        {
+          timestamp: "2026-05-02T23:35:45.200Z",
+          event_type: "nemotron_completed",
+          scan_id: "mock_scan_001",
+          details: "AI analysis returned 4 findings",
+        },
+        {
+          timestamp: "2026-05-02T23:35:46.620Z",
+          event_type: "triage_completed",
+          scan_id: "mock_scan_001",
+          details: "Sorted findings by severity",
+        },
+        {
+          timestamp: "2026-05-02T23:35:46.730Z",
+          event_type: "scan_completed",
+          scan_id: "mock_scan_001",
+          details: "4 findings generated",
+        },
+      ],
+    };
+
+    const STEP_DEFS = [
+      { name: "scan_started", label: "Initialize scan", duration_ms: 412 },
+      { name: "network_scan", label: "Scanning network", duration_ms: 25400 },
+      {
+        name: "service_detection",
+        label: "Detecting services",
+        duration_ms: 15300,
+      },
+      {
+        name: "nemotron_analysis",
+        label: "AI risk analysis",
+        duration_ms: 4200,
+      },
+      { name: "triage", label: "Triaging findings", duration_ms: 1418 },
+    ];
+
+    let _mockTickCount = 0;
+
+    function resetMockProgressive() {
+      _mockTickCount = 0;
+    }
+
+    function getMockProgressiveState() {
+      _mockTickCount += 1;
+      const completedSteps = Math.min(
+        Math.floor(_mockTickCount / 3),
+        STEP_DEFS.length
+      );
+      const isDone = completedSteps >= STEP_DEFS.length;
+
+      return {
+        current_scan_id: "mock_scan_001",
+        pipeline_status: isDone ? "done" : "running",
+        current_step: isDone ? null : STEP_DEFS[completedSteps].name,
+        steps: STEP_DEFS.map((step, idx) => ({
+          name: step.name,
+          label: step.label,
+          status:
+            idx < completedSteps
+              ? "done"
+              : idx === completedSteps
+                ? "running"
+                : "pending",
+          duration_ms: idx < completedSteps ? step.duration_ms : null,
+        })),
+      };
+    }
+
+    async function api(method, path, body = null) {
+      try {
+        const opts = { method };
+        if (body !== null) {
+          opts.headers = { "Content-Type": "application/json" };
+          opts.body = JSON.stringify(body);
+        }
+
+        const res = await fetch(path, opts);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (e) {
+        console.warn(`[mock fallback] ${method} ${path}:`, e.message);
+        return getMockResponse(method, path);
+      }
+    }
+
+    function getMockResponse(method, path) {
+      if (path === "/api/health") return MOCK.health;
+      if (path === "/api/scan" && method === "POST") {
+        resetMockProgressive();
+        return MOCK.scanStartResponse;
+      }
+      if (path === "/api/state") return getMockProgressiveState();
+      if (path.startsWith("/api/scan/")) return MOCK.fullScan;
+      if (path === "/api/history") return MOCK.history;
+      if (path === "/api/audit-log") return MOCK.auditLog;
+      return null;
+    }
+
+    function showLanding() {
+      document.getElementById("landing-view").classList.remove("hidden");
+      document.getElementById("dashboard-view").classList.add("hidden");
+      appState.currentView = "landing";
+    }
+
+    function showDashboard() {
+      document.getElementById("landing-view").classList.add("hidden");
+      document.getElementById("dashboard-view").classList.remove("hidden");
+      appState.currentView = "dashboard";
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function formatDuration(ms) {
+      if (ms === null || ms === undefined) return "";
+      if (ms < 1000) return `${ms}ms`;
+      return `${(ms / 1000).toFixed(1)}s`;
+    }
+
+    function formatTime(isoString) {
+      if (!isoString) return "";
+      try {
+        const d = new Date(isoString);
+        return d.toTimeString().split(" ")[0];
+      } catch (e) {
+        return "";
+      }
+    }
+
+    function formatRelativeTime(isoString) {
+      if (!isoString) return "";
+      const d = new Date(isoString);
+      const diffMs = Date.now() - d.getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+
+      if (diffSec < 60) return "just now";
+      if (diffSec < 3600) return `${Math.floor(diffSec / 60)} minutes ago`;
+      if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} hours ago`;
+      return `${Math.floor(diffSec / 86400)} days ago`;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      showLanding();
+
+      window.appState = appState;
+      window.api = api;
+      window.MOCK = MOCK;
+      window.STEP_DEFS = STEP_DEFS;
+      window.showLanding = showLanding;
+      window.showDashboard = showDashboard;
+      window.escapeHtml = escapeHtml;
+      window.formatDuration = formatDuration;
+      window.formatTime = formatTime;
+      window.formatRelativeTime = formatRelativeTime;
+      window.resetMockProgressive = resetMockProgressive;
+    });
+  </script>
+</body>
+</html>
