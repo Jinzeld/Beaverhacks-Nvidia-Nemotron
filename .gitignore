@@ -1,8 +1,11 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 
-# Envirenments
+# Environments
 venv/
 env/
 .evn
 .venv
+
+# Cursor / Claude local project config
+.claude/
