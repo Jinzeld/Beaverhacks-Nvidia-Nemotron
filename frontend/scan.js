@@ -5,7 +5,7 @@ const SCAN_PAYLOAD_KEY = "secagent_scan";
 const BACKEND = "http://localhost:8000";
 
 /** true = offline mock; false = POST /api/review (requires backend + .env). */
-const USE_STATIC_MOCK = true;
+const USE_STATIC_MOCK = false;
 
 let lastResult = null;
 let lastTarget = "";
