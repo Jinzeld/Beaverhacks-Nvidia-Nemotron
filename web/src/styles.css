@@ -1,0 +1,123 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  --color-bg: #070808;
+  --color-surface: #0d0f0d;
+  --color-card: #0d0f0d;
+  --color-border: #1a1f1a;
+  --color-green: #76ed4b;
+  --color-green-dim: #5bc238;
+  --color-green-bright: #a8ff7a;
+  --color-text: #e8f2e0;
+  --color-muted: #7a8c75;
+  --color-faint: #3f4a3d;
+
+  --color-risk-critical: #ff3b47;
+  --color-risk-high: #ff8a3d;
+  --color-risk-medium: #ffd23d;
+  --color-risk-low: #76ed4b;
+  --color-risk-info: #5ac8fa;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-bg text-text font-body antialiased;
+    font-family: var(--font-body);
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-ring {
+  from {
+    stroke-dashoffset: 283;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes hero-type-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-glow {
+  text-shadow:
+    0 0 12px rgba(118, 237, 75, 0.45),
+    0 0 28px rgba(118, 237, 75, 0.35),
+    0 0 48px rgba(118, 237, 75, 0.2);
+}
+
+.hero-type-first {
+  animation: hero-type-in 0.55s ease both;
+}
+
+.hero-type-second {
+  animation: hero-type-in 0.55s ease 0.12s both;
+}
+
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+  .animate-fade-up {
+    animation: none;
+  }
+  .hero-glow {
+    text-shadow: none;
+  }
+  .hero-type-first,
+  .hero-type-second {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

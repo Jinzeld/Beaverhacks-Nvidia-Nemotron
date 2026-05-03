@@ -1,6 +1,10 @@
 # Local secrets
 .env
 
+# OS / editor noise
+.DS_Store
+.claude/
+
 # Python virtual environments and cache
 .venv/
 __pycache__/

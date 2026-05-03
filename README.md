@@ -44,7 +44,7 @@ nemotron-vm-fix-agent/
 |----------|-------------------------------------------|
 | Model    | NVIDIA NIM — Nemotron 3 Nano 30B-A3B      |
 | Backend  | FastAPI + Uvicorn (Python)                |
-| Frontend | Vanilla HTML/CSS/JS (zero dependencies)   |
+| Frontend | React + Vite + TypeScript ([`web/`](web/)); legacy static UI in [`frontend/`](frontend/) |
 | Streaming| Server-Sent Events (SSE)                  |
 
 ---
@@ -57,30 +57,25 @@ nemotron-vm-fix-agent/
 cd backend
 pip install -r requirements.txt
 
-export NVIDIA_API_KEY="nvapi-xxxxxxxxxxxx"
+export NVIDIA_API_KEY="nvapi-xxxxxxxxxxxx"   # optional; planner falls back if unset
 
-uvicorn main:app --reload --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Backend runs at `http://localhost:8000`
-API docs at `http://localhost:8000/docs`
+Backend runs at `http://127.0.0.1:8000`  
+API docs at `http://127.0.0.1:8000/docs`
 
-### 2. Frontend
-
-Just open the file in your browser — no build step needed:
+### 2. Frontend (primary — `web/`)
 
 ```bash
-open frontend/index.html
-# or on Windows:
-start frontend/index.html
+cd web
+npm install
+npm run dev
 ```
 
-Or serve it with Python:
-```bash
-cd frontend
-python -m http.server 3000
-# then open http://localhost:3000
-```
+Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/). In local dev, leave `VITE_API_BASE_URL` empty so Vite proxies `/api` to the backend on port 8000. Set `VITE_USE_MOCK=false` in `web/.env` for live scans. See [`web/README.md`](web/README.md).
+
+**Legacy static UI:** open `frontend/index.html` in a browser or `cd frontend && python -m http.server 3000` (no build; uses `frontend/scan.js`).
 
 ---
 
@@ -120,11 +115,11 @@ curl -X POST http://localhost:8000/scan \
 To deploy publicly (e.g. for a hackathon demo):
 
 ```bash
-# Backend on a server
-uvicorn main:app --host 0.0.0.0 --port 8000
+# Backend on a server (run from repo / backend)
+cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# Update BACKEND in index.html line 1 to your server IP/domain:
-# const BACKEND = "https://your-server.com";
+# React app: set VITE_API_BASE_URL at build time to your API origin, or serve API and UI on the same host.
+# Legacy static: set BACKEND in frontend/scan.js to your API URL.
 ```
 
 Free options: Railway, Render, Fly.io all support FastAPI with one config file.
