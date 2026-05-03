@@ -83,32 +83,28 @@ export function ScanReport({
   const total = report.vulnerabilities.length || 1
   const w = (n: number) => `${(n / total) * 100}%`
 
-  function triggerBlobDownload(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
   async function download() {
-    const safeName = report.target.replace(/[^a-z0-9]/gi, '_')
     if (useMock) {
       const blob = new Blob(
         [`SecAgent report (mock)\n\n${report.summary}\n\n${JSON.stringify(report.vulnerabilities, null, 2)}`],
         { type: 'text/plain' },
       )
-      triggerBlobDownload(blob, `report_${safeName}.txt`)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `report_${report.target.replace(/[^a-z0-9]/gi, '_')}.txt`
+      a.click()
+      URL.revokeObjectURL(a.href)
       onToast('Downloaded demo file')
       return
     }
     try {
       const md = await getReportMarkdown()
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
-      triggerBlobDownload(blob, `report_${safeName}.md`)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `report_${report.target.replace(/[^a-z0-9]/gi, '_')}.md`
+      a.click()
+      URL.revokeObjectURL(a.href)
       onToast('Report downloaded')
     } catch (e) {
       onToast(e instanceof Error ? e.message.slice(0, 80) : 'Report not available')

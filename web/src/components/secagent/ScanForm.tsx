@@ -62,8 +62,8 @@ export function ScanForm({ phase, value, onChange, onSubmit, disabled, useMock }
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 onKeyDown={(e) => e.key === 'Enter' && !disabled && onSubmit()}
-                placeholder="example.com or 192.168.1.1"
-                title="Note for the review goal only. The scanned host is TARGET_URL in the server .env."
+                placeholder="allowlisted target, e.g. 100.55.30.91"
+                title="Target host sent to backend; backend scans only if it is allowlisted."
                 className="w-full min-w-0 bg-transparent py-3.5 pl-3 pr-3 font-mono text-sm text-green-bright caret-green-bright placeholder:text-faint/80 focus:outline-none"
                 disabled={disabled}
                 aria-describedby="scan-target-hint"
@@ -84,8 +84,7 @@ export function ScanForm({ phase, value, onChange, onSubmit, disabled, useMock }
         </div>
       </div>
       <p id="scan-target-hint" className="sr-only">
-        User input is sent only as context inside the review goal. The real scan target comes from
-        server environment variables.
+        User input is sent as target_host. The backend accepts it only when it matches the allowlist.
       </p>
       <div className="mt-4 flex flex-col gap-1 font-mono text-[10px] text-muted sm:flex-row sm:items-center sm:justify-between">
         <span>

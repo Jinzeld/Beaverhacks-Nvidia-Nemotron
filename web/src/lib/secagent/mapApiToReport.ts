@@ -1,62 +1,74 @@
 import type { ScanReportVM, SeverityUi, VulnerabilityVM } from './types'
 
-/** Backend finding shape from POST /api/review (matches findings.py Finding.to_dict()) */
+/** Backend finding shape from POST /api/review */
 export interface ApiFinding {
   finding_id: string
   title: string
   category: string
   severity: string
-  status?: string
   evidence: string
   affected_target: string
   recommendation: string
-  remediation_type?: string
   created_at?: string
 }
 
-/** Backend recommendation_summary from recommender.py RecommendationSummary.to_dict() */
-export interface ApiRecommendationSummary {
-  total_findings: number
-  highest_severity: string
-  counts_by_severity: Record<string, number>
-  priority_actions: string[]
-  overall_summary: string
+export interface ApiPlanStep {
+  step_number?: number
+  tool_name?: string
+  reason?: string
+  status?: string
+}
+
+export interface ApiDecisionLogEntry {
+  phase?: string
+  message?: string
+  action?: string
+  args?: Record<string, unknown>
 }
 
 export interface ApiReviewResponse {
   goal?: string
   target_url?: string
+  approved_target_host?: string
+  services?: Array<{ port?: number; service?: string; version?: string; state?: string }>
+  observations?: Array<{ tool?: string; summary?: string }>
+  decision_log?: ApiDecisionLogEntry[]
+  plan?: { steps?: ApiPlanStep[] }
   findings?: ApiFinding[]
+  recommendation_summary?: { overall_summary?: string; highest_severity?: string; total_findings?: number }
+  report_markdown?: string
   error?: string | null
-  recommendation_summary?: ApiRecommendationSummary
   [key: string]: unknown
 }
 
+/** Mirrors frontend/scan.js severityToUi (info/unknown → LOW). */
 function severityToUi(sev: string | undefined): SeverityUi {
-  switch (String(sev || 'low').toLowerCase()) {
-    case 'critical': return 'CRITICAL'
-    case 'high':     return 'HIGH'
-    case 'medium':   return 'MEDIUM'
-    case 'info':     return 'INFO'
-    default:         return 'LOW'
-  }
+  const s = String(sev || 'low').toLowerCase()
+  if (s === 'high') return 'HIGH'
+  if (s === 'medium') return 'MEDIUM'
+  if (s === 'low') return 'LOW'
+  return 'LOW'
 }
 
+/** Mirrors frontend/scan.js riskScoreFromFindings. */
 export function riskScoreFromFindings(findings: ApiFinding[]): number {
   if (!findings.length) return 0
-  const rank: Record<string, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 }
+  const rank: Record<string, number> = { low: 1, medium: 2, high: 3, info: 0 }
   let maxR = 0
   for (const f of findings) {
     const r = rank[String(f.severity || 'low').toLowerCase()] ?? 1
     if (r > maxR) maxR = r
   }
-  const base = maxR === 4 ? 85 : maxR === 3 ? 72 : maxR === 2 ? 48 : maxR === 1 ? 28 : 12
+  const base = maxR === 3 ? 72 : maxR === 2 ? 48 : maxR === 1 ? 28 : 12
   return Math.min(95, base + Math.min(findings.length * 3, 18))
 }
 
+/**
+ * Mirrors frontend/scan.js mapApiResponseToViewModel — single source for UI.
+ */
 export function mapApiToReport(apiJson: ApiReviewResponse): ScanReportVM {
   const findings = apiJson.findings ?? []
-  const targetUrl = apiJson.target_url ?? ''
+  const targetUrl = apiJson.target_url ?? apiJson.approved_target_host ?? ''
   const err = apiJson.error
 
   const vulnerabilities: VulnerabilityVM[] = findings.map((f) => {
@@ -66,12 +78,13 @@ export function mapApiToReport(apiJson: ApiReviewResponse): ScanReportVM {
         ? 'EXPOSED_HEADER'
         : 'MISCONFIGURATION'
     const sevUi = severityToUi(f.severity)
+    const desc = [f.title || '', f.evidence || ''].filter(Boolean).join('\n\n')
     return {
       id: f.finding_id || '',
       type,
       severity: sevUi,
-      description: f.title || '',
-      impact: '',
+      description: desc,
+      impact: f.recommendation || '',
       endpoint: f.affected_target || '',
       vulnerable_code: f.evidence || '',
       fix: f.recommendation
@@ -84,26 +97,20 @@ export function mapApiToReport(apiJson: ApiReviewResponse): ScanReportVM {
     }
   })
 
-  // Prefer backend-computed priority_actions (severity-sorted); fall back to deduped recommendations.
-  const tips: string[] =
-    apiJson.recommendation_summary?.priority_actions?.length
-      ? apiJson.recommendation_summary.priority_actions
-      : (() => {
-          const seen = new Set<string>()
-          const out: string[] = []
-          for (const f of findings) {
-            if (f.recommendation && !seen.has(f.recommendation)) {
-              seen.add(f.recommendation)
-              out.push(f.recommendation)
-            }
-          }
-          return out
-        })()
+  const tips: string[] = []
+  const seen = new Set<string>()
+  for (const f of findings) {
+    const r = f.recommendation
+    if (r && !seen.has(r)) {
+      seen.add(r)
+      tips.push(r)
+    }
+  }
 
-  // Prefer backend overall_summary; fall back to a derived line.
-  const derivedSummary = `${findings.length} finding(s) from read-only header review.`
-  let summary = apiJson.recommendation_summary?.overall_summary || derivedSummary
+  const serviceCount = apiJson.services?.length ?? 0
+  let summary = apiJson.recommendation_summary?.overall_summary || `${findings.length} finding(s) from controlled external audit across ${serviceCount} discovered service(s).`
   if (err) summary = `Error: ${err}. ${summary}`
+  if (apiJson.goal) summary += ` Goal: ${apiJson.goal}`
 
   const scannedAt = findings[0]?.created_at ?? new Date().toISOString()
 
@@ -112,7 +119,7 @@ export function mapApiToReport(apiJson: ApiReviewResponse): ScanReportVM {
     summary,
     risk_score: riskScoreFromFindings(findings),
     scanned_at: scannedAt,
-    model_used: 'Nemotron VM Fix Agent (read-only API)',
+    model_used: 'Nemotron External Audit Agent (live API)',
     vulnerabilities,
     secure_coding_tips: tips.slice(0, 6),
   }

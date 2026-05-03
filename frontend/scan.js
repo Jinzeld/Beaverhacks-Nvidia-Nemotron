@@ -2,27 +2,13 @@
  * Results page: mock scan or live FastAPI POST /api/review + GET /api/report.
  */
 const SCAN_PAYLOAD_KEY = "secagent_scan";
-const BACKEND =
-  (typeof window !== "undefined" && window.__SECAGENT_API_BASE__) ||
-  "http://localhost:8000";
+const BACKEND = "http://localhost:8000";
 
 /** true = offline mock; false = POST /api/review (requires backend + .env). */
 const USE_STATIC_MOCK = false;
 
 let lastResult = null;
 let lastTarget = "";
-/** While true, keep the window scrolled to top; only the terminal panel scrolls. */
-let lockViewportTop = false;
-
-function scrollConsoleToBottom() {
-  const co = document.getElementById("console-out");
-  if (!co) return;
-  co.scrollTop = co.scrollHeight;
-  if (lockViewportTop) {
-    window.scrollTo(0, 0);
-    requestAnimationFrame(() => window.scrollTo(0, 0));
-  }
-}
 
 function esc(s) {
   return String(s)
@@ -41,9 +27,8 @@ function showToast(msg) {
 
 function log(msg) {
   const co = document.getElementById("console-out");
-  if (!co) return;
   co.textContent += msg + "\n";
-  scrollConsoleToBottom();
+  co.scrollTop = co.scrollHeight;
 }
 
 function loadPayload() {
@@ -53,15 +38,6 @@ function loadPayload() {
     return JSON.parse(raw);
   } catch {
     return null;
-  }
-}
-
-async function getHealth() {
-  try {
-    const r = await fetch(`${BACKEND}/api/health`);
-    return r.ok;
-  } catch {
-    return false;
   }
 }
 
@@ -215,14 +191,12 @@ async function runMockScan(payload) {
   const co = document.getElementById("console-out");
   const { target, modules, model } = payload;
   lastTarget = target;
-  lockViewportTop = true;
 
   document.getElementById("console-wrap").style.display = "block";
   document.getElementById("results-wrap").style.display = "none";
   co.textContent = "";
   document.getElementById("console-status").textContent = "SCANNING...";
   document.getElementById("console-dot").style.animation = "";
-  window.scrollTo(0, 0);
 
   log(`[*] Target   : ${target}`);
   log(`[*] Modules  : ${modules.join(", ")}`);
@@ -239,7 +213,7 @@ async function runMockScan(payload) {
     "Header hygiene review (preview).\nMissing CSP/XFO can amplify XSS and clickjacking risk.\n";
   for (const ch of narrative) {
     co.textContent += ch;
-    scrollConsoleToBottom();
+    co.scrollTop = co.scrollHeight;
     await delay(12);
   }
 
@@ -247,14 +221,12 @@ async function runMockScan(payload) {
   lastResult = result;
   document.getElementById("console-status").textContent = "COMPLETE ✓";
   document.getElementById("console-dot").style.animation = "none";
-  lockViewportTop = false;
   renderResults(result);
 }
 
 async function runApiReview(payload) {
   const co = document.getElementById("console-out");
   const { target, modules, model } = payload;
-  lockViewportTop = true;
 
   document.getElementById("console-wrap").style.display = "block";
   document.getElementById("results-wrap").style.display = "none";
@@ -262,7 +234,6 @@ async function runApiReview(payload) {
   document.getElementById("console-status").textContent = "SCANNING...";
   document.getElementById("console-dot").style.animation = "";
   lastResult = null;
-  window.scrollTo(0, 0);
 
   const goal = [
     "Read-only security review (MVP).",
@@ -274,18 +245,6 @@ async function runApiReview(payload) {
   log(`[*] POST ${BACKEND}/api/review`);
   log(`[*] Modules (context): ${modules.join(", ")}`);
   log(`[*] Note: actual TARGET_URL comes from server .env\n`);
-
-  const healthy = await getHealth();
-  if (!healthy) {
-    lockViewportTop = false;
-    showToast(
-      "Backend not reachable — start FastAPI (e.g. :8000) or set window.__SECAGENT_API_BASE__."
-    );
-    log(`[✗] GET ${BACKEND}/api/health failed — is the API running?`);
-    document.getElementById("console-status").textContent = "FAILED";
-    document.getElementById("console-dot").style.animation = "none";
-    return;
-  }
 
   try {
     const resp = await fetch(`${BACKEND}/api/review`, {
@@ -303,10 +262,10 @@ async function runApiReview(payload) {
     log("[*] Response received, mapping results…\n");
 
     const narrative =
-      "Review complete. Findings reflect read-only checks from the configured lab target (headers, inventory, and enabled tools).\n";
+      "Review complete. Findings reflect HTTP headers from the configured server target.\n";
     for (const ch of narrative) {
       co.textContent += ch;
-      scrollConsoleToBottom();
+      co.scrollTop = co.scrollHeight;
       await delay(10);
     }
 
@@ -319,10 +278,8 @@ async function runApiReview(payload) {
 
     document.getElementById("console-status").textContent = "COMPLETE ✓";
     document.getElementById("console-dot").style.animation = "none";
-    lockViewportTop = false;
     renderResults(vm);
   } catch (e) {
-    lockViewportTop = false;
     showToast("Request failed — check backend, .env, and CORS origin.");
     log(`\n[✗] ${e.message}`);
     document.getElementById("console-status").textContent = "FAILED";
@@ -331,7 +288,6 @@ async function runApiReview(payload) {
 }
 
 function renderResults(result) {
-  lockViewportTop = false;
   const wrap = document.getElementById("results-wrap");
   const vulns = result.vulnerabilities || [];
   const risk = result.risk_score || 0;
@@ -535,17 +491,7 @@ function goHome() {
   window.location.href = "index.html";
 }
 
-function resetPageScroll() {
-  if ("scrollRestoration" in history) {
-    history.scrollRestoration = "manual";
-  }
-  window.scrollTo(0, 0);
-  requestAnimationFrame(() => window.scrollTo(0, 0));
-}
-
 document.addEventListener("DOMContentLoaded", () => {
-  resetPageScroll();
-
   const payload = loadPayload();
   if (!payload || !payload.target) {
     window.location.href = "index.html";
