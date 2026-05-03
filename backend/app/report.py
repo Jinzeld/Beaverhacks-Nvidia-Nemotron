@@ -1,0 +1,266 @@
+"""
+Markdown report generator.
+
+This module creates reports/report.md from structured agent results.
+
+Important:
+- This is read-only.
+- It writes only to the configured reports directory.
+- It does not modify Nginx.
+- It does not modify firewall settings.
+- It does not modify Windows VM.
+- It does not execute shell commands.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Dict, List
+
+from app.findings import Finding
+from app.recommender import RecommendationSummary
+
+
+def markdown_escape(value: object) -> str:
+    """
+    Escape Markdown table-breaking characters.
+    """
+
+    text = str(value)
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def read_trace_events(trace_path: Path) -> List[Dict[str, Any]]:
+    """
+    Read JSONL trace events from audit_logs/agent_trace.jsonl.
+
+    If the trace file does not exist, return an empty list so report generation
+    does not crash during development.
+    """
+
+    if not trace_path.exists():
+        return []
+
+    events: List[Dict[str, Any]] = []
+
+    with trace_path.open("r", encoding="utf-8") as file:
+        for line in file:
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                events.append(
+                    {
+                        "timestamp": "unknown",
+                        "event": "unparseable_trace_line",
+                        "data": {"raw": line},
+                    }
+                )
+
+    return events
+
+
+def format_plan_table(plan: Any) -> str:
+    """
+    Render the visible agent plan as a Markdown table.
+    """
+
+    rows = [
+        "| Step | Tool | Reason |",
+        "|---:|---|---|",
+    ]
+
+    for step in plan.steps:
+        rows.append(
+            "| "
+            f"{markdown_escape(step.step_number)} | "
+            f"{markdown_escape(step.tool_name)} | "
+            f"{markdown_escape(step.reason)} |"
+        )
+
+    return "\n".join(rows)
+
+
+def format_findings_table(findings: List[Finding]) -> str:
+    """
+    Render findings as a Markdown table.
+    """
+
+    if not findings:
+        return "No findings were detected by the currently enabled tools."
+
+    rows = [
+        "| Severity | Finding | Evidence | Recommendation |",
+        "|---|---|---|---|",
+    ]
+
+    for finding in findings:
+        rows.append(
+            "| "
+            f"{markdown_escape(finding.severity.upper())} | "
+            f"{markdown_escape(finding.title)} | "
+            f"{markdown_escape(finding.evidence)} | "
+            f"{markdown_escape(finding.recommendation)} |"
+        )
+
+    return "\n".join(rows)
+
+
+def format_recommendations(summary: RecommendationSummary) -> str:
+    """
+    Render prioritized text-only recommendations.
+    """
+
+    lines = []
+
+    for index, action in enumerate(summary.priority_actions, start=1):
+        lines.append(f"{index}. {action}")
+
+    return "\n".join(lines)
+
+
+def format_trace_summary(trace_events: List[Dict[str, Any]]) -> str:
+    """
+    Render a short agent trace summary.
+
+    This is a visible, structured trace. It is not private chain-of-thought.
+    """
+
+    if not trace_events:
+        return "No trace events were available."
+
+    rows = [
+        "| # | Event | Timestamp |",
+        "|---:|---|---|",
+    ]
+
+    for index, event in enumerate(trace_events, start=1):
+        rows.append(
+            "| "
+            f"{index} | "
+            f"{markdown_escape(event.get('event', 'unknown'))} | "
+            f"{markdown_escape(event.get('timestamp', 'unknown'))} |"
+        )
+
+    return "\n".join(rows)
+
+
+def generate_markdown_report(
+    *,
+    report_path: Path,
+    goal: str,
+    target_url: str,
+    approved_target_host: str,
+    read_only: bool,
+    plan: Any,
+    findings: List[Finding],
+    recommendation_summary: RecommendationSummary,
+    trace_path: Path,
+    tool_outputs: Dict[str, Any],
+) -> Path:
+    """
+    Generate the Markdown report.
+
+    The report is intentionally plain Markdown so it can be committed later as a
+    sample, converted to PDF, or displayed in a FastAPI dashboard.
+    """
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+
+    trace_events = read_trace_events(trace_path)
+
+    http_output = tool_outputs.get("http_header_scan", {})
+    status_code = http_output.get("status_code", "unknown")
+    scan_error = http_output.get("error")
+
+    lines = [
+        "# Nemotron VM Fix Agent Report",
+        "",
+        "## Project Positioning",
+        "",
+        "Nemotron VM Fix Agent is a defensive, agentic VM security advisor for controlled lab environments.",
+        "",
+        "It is not an autonomous pentesting agent.",
+        "",
+        "**Core safety sentence:**",
+        "",
+        "> Nemotron reasons. Backend controls tools. Human approves risky actions.",
+        "",
+        "## MVP Safety Disclaimer",
+        "",
+        "- This report was generated by the read-only MVP workflow.",
+        "- No exploit payloads were used.",
+        "- No credential attacks were performed.",
+        "- No shell commands were executed by the HTTP scanner.",
+        "- No Nginx configuration was modified.",
+        "- No firewall settings were modified.",
+        "- The Windows VM was not modified.",
+        "",
+        "## Scope",
+        "",
+        f"- **Goal:** {goal}",
+        f"- **Target URL:** `{target_url}`",
+        f"- **Approved Target Host:** `{approved_target_host}`",
+        f"- **Read-only Mode:** `{read_only}`",
+        "",
+        "## Agent Workflow",
+        "",
+        "The MVP uses a lightweight backend-controlled agent loop:",
+        "",
+        "```text",
+        "Scope Check -> Plan -> Run Read-Only Tool -> Observe -> Recommend -> Report",
+        "```",
+        "",
+        "## Agent Plan",
+        "",
+        format_plan_table(plan),
+        "",
+        "## Tool Observations",
+        "",
+        f"- **HTTP status code:** `{status_code}`",
+        f"- **Scan error:** `{scan_error}`",
+        "",
+        "## Finding Summary",
+        "",
+        f"- **Total findings:** `{recommendation_summary.total_findings}`",
+        f"- **Highest severity:** `{recommendation_summary.highest_severity}`",
+        f"- **High:** `{recommendation_summary.counts_by_severity.get('high', 0)}`",
+        f"- **Medium:** `{recommendation_summary.counts_by_severity.get('medium', 0)}`",
+        f"- **Low:** `{recommendation_summary.counts_by_severity.get('low', 0)}`",
+        f"- **Info:** `{recommendation_summary.counts_by_severity.get('info', 0)}`",
+        "",
+        "## Findings",
+        "",
+        format_findings_table(findings),
+        "",
+        "## Recommendation Summary",
+        "",
+        recommendation_summary.overall_summary,
+        "",
+        "## Prioritized Recommendations",
+        "",
+        format_recommendations(recommendation_summary),
+        "",
+        "## Agent Trace Summary",
+        "",
+        "The following table shows the structured, user-visible agent workflow trace.",
+        "",
+        format_trace_summary(trace_events),
+        "",
+        "## Next Steps",
+        "",
+        "1. Review the generated findings with the team.",
+        "2. Confirm the target is the intended controlled lab VM.",
+        "3. Add Nemotron reasoning in a later phase for explanation and prioritization narrative.",
+        "4. Keep the MVP read-only by default.",
+        "5. Only implement Nginx remediation or firewall hardening as approval-gated stretch features.",
+        "",
+    ]
+
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+
+    return report_path

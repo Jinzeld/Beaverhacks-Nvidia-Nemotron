@@ -10,6 +10,7 @@ The orchestrator is responsible for:
 4. Selecting tools from the backend-controlled tool registry.
 5. Running only enabled read-only tools.
 6. Recording structured observations and trace events.
+7. Generating a Markdown report.
 
 Important:
 This is not an autonomous pentesting agent.
@@ -24,10 +25,13 @@ Nemotron will be added later as the reasoning layer, but even then:
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.agent_trace import AgentTraceLogger
 from app.findings import Finding
+from app.recommender import RecommendationSummary, generate_recommendation_summary
+from app.report import generate_markdown_report
 from app.scanner import HeaderScanResult, scan_http_headers, validate_target_url
 from app.tool_registry import get_tool_registry, require_enabled_tool
 
@@ -84,6 +88,8 @@ class AgentRunResult:
     plan: AgentPlan
     tool_outputs: Dict[str, Any]
     findings: List[Finding]
+    recommendation_summary: Dict[str, Any]
+    report_path: Optional[str]
     error: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -95,6 +101,8 @@ class AgentRunResult:
             "plan": self.plan.to_dict(),
             "tool_outputs": self.tool_outputs,
             "findings": [finding.to_dict() for finding in self.findings],
+            "recommendation_summary": self.recommendation_summary,
+            "report_path": self.report_path,
             "error": self.error,
         }
 
@@ -103,7 +111,7 @@ def build_deterministic_plan(goal: str) -> AgentPlan:
     """
     Build the MVP investigation plan.
 
-    For Phase 2, this plan is deterministic.
+    For Phase 3, this plan is deterministic.
     Later, Nemotron can help explain or refine the plan, but the backend must
     still validate every tool and target before execution.
     """
@@ -116,10 +124,18 @@ def build_deterministic_plan(goal: str) -> AgentPlan:
                 step_number=1,
                 tool_name="http_header_scan",
                 reason=(
-                    "Check the configured Nginx TARGET_URL for missing browser "
-                    "security headers and wildcard CORS."
+                    "Check the configured TARGET_URL for missing browser security "
+                    "headers and wildcard CORS."
                 ),
-            )
+            ),
+            AgentPlanStep(
+                step_number=2,
+                tool_name="markdown_report_generator",
+                reason=(
+                    "Generate a Markdown report from structured findings and "
+                    "the visible agent trace."
+                ),
+            ),
         ],
     )
 
@@ -130,12 +146,14 @@ def run_agentic_security_review(
     target_url: str,
     approved_target_host: str,
     trace_logger: AgentTraceLogger,
+    report_path: Path,
+    trace_path: Path,
 ) -> AgentRunResult:
     """
     Run the read-only agentic security review.
 
     High-level flow:
-    Scope Check -> Plan -> Select Tool -> Execute Read-Only Tool -> Observe -> Return Results
+    Scope Check -> Plan -> Select Tool -> Execute Read-Only Tool -> Observe -> Report
 
     No system changes are made here.
     """
@@ -145,7 +163,6 @@ def run_agentic_security_review(
         data={"goal": goal},
     )
 
-    # Scope validation prevents scanning arbitrary targets.
     validate_target_url(target_url, approved_target_host)
 
     trace_logger.log_event(
@@ -157,7 +174,6 @@ def run_agentic_security_review(
         },
     )
 
-    # Load the backend-controlled tool registry.
     registry = get_tool_registry()
     trace_logger.log_event(
         event="tool_registry_loaded",
@@ -166,7 +182,6 @@ def run_agentic_security_review(
         },
     )
 
-    # Create the safe read-only plan.
     plan = build_deterministic_plan(goal)
     trace_logger.log_event(
         event="agent_plan_generated",
@@ -175,9 +190,10 @@ def run_agentic_security_review(
 
     tool_outputs: Dict[str, Any] = {}
     all_findings: List[Finding] = []
+    generated_report_path: Optional[str] = None
+    recommendation_summary: RecommendationSummary = generate_recommendation_summary([])
 
     for step in plan.steps:
-        # Safety gate: only registered, enabled, read-only tools may run.
         tool = require_enabled_tool(step.tool_name)
 
         trace_logger.log_event(
@@ -218,16 +234,55 @@ def run_agentic_security_review(
                         "error": scan_result.error,
                     },
                 )
-        else:
+
+        elif tool.name == "markdown_report_generator":
+            recommendation_summary = generate_recommendation_summary(all_findings)
+
+            generated_path = generate_markdown_report(
+                report_path=report_path,
+                goal=goal,
+                target_url=target_url,
+                approved_target_host=approved_target_host,
+                read_only=True,
+                plan=plan,
+                findings=all_findings,
+                recommendation_summary=recommendation_summary,
+                trace_path=trace_path,
+                tool_outputs=tool_outputs,
+            )
+
+            generated_report_path = str(generated_path)
+
+            tool_outputs[tool.name] = {
+                "report_path": generated_report_path,
+                "recommendation_summary": recommendation_summary.to_dict(),
+            }
+
             trace_logger.log_event(
-                event="tool_skipped",
+                event="report_generated",
                 data={
                     "tool_name": tool.name,
-                    "reason": "Tool is not implemented in this phase.",
+                    "report_path": generated_report_path,
+                    "findings_count": len(all_findings),
                 },
             )
 
-    highest_severity = calculate_highest_severity(all_findings)
+            trace_logger.log_event(
+                event="tool_completed",
+                data={
+                    "tool_name": tool.name,
+                    "report_path": generated_report_path,
+                    "error": None,
+                },
+            )
+
+        else:
+            raise RuntimeError(
+                f"Tool '{tool.name}' is enabled but has no execution handler. "
+                "Check tool_registry.py and agent_orchestrator.py."
+            )
+
+    highest_severity = recommendation_summary.highest_severity
 
     trace_logger.log_event(
         event="agent_observation_completed",
@@ -242,6 +297,7 @@ def run_agentic_security_review(
         data={
             "read_only": True,
             "no_system_changes_made": True,
+            "report_path": generated_report_path,
         },
     )
 
@@ -253,25 +309,7 @@ def run_agentic_security_review(
         plan=plan,
         tool_outputs=tool_outputs,
         findings=all_findings,
+        recommendation_summary=recommendation_summary.to_dict(),
+        report_path=generated_report_path,
         error=None,
     )
-
-
-def calculate_highest_severity(findings: List[Finding]) -> str:
-    """
-    Return the highest severity among all findings.
-
-    This is deterministic triage logic.
-    """
-
-    if not findings:
-        return "none"
-
-    order = {
-        "info": 0,
-        "low": 1,
-        "medium": 2,
-        "high": 3,
-    }
-
-    return max(findings, key=lambda finding: order[finding.severity]).severity
