@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getHealth, postReview } from '@/lib/secagent/api'
+import { agentDebugLog } from '@/lib/secagent/agentDebug'
+import { checkApiHealth, postReview, type ApiHealthResult } from '@/lib/secagent/api'
 import { buildReviewGoal, MODULES_DEFAULT, normalizeTarget } from '@/lib/secagent/constants'
 import { mapApiToReport } from '@/lib/secagent/mapApiToReport'
 import { buildMockResult } from '@/lib/secagent/mock'
@@ -33,6 +34,24 @@ const MOCK_LINES = [
   'aggregating findings…',
 ]
 
+function toastForApiHealth(h: ApiHealthResult): string {
+  if (h.ok) return ''
+  if (h.fetchFailed) {
+    const detail = h.errMsg ? ` (${h.errMsg.slice(0, 72)}${h.errMsg.length > 72 ? '…' : ''})` : ''
+    const hint =
+      /failed to fetch|networkerror|load failed|econnrefused|connection refused/i.test(
+        h.errMsg || '',
+      )
+        ? ' Start FastAPI (npm run dev:api) and match VITE_API_BASE_URL port.'
+        : ''
+    return `Cannot reach API${detail}.${hint}`.replace(/\s+/g, ' ').trim()
+  }
+  if (h.httpStatus === 502) {
+    return '502: Vite proxy could not reach the API (see VITE_DEV_API_PROXY_TARGET). Use npm run dev (starts API+Vite), or npm run dev:api in another terminal if you use npm run dev:vite.'
+  }
+  return `API health check failed (HTTP ${h.httpStatus ?? '?'}). Start FastAPI or adjust proxy / VITE_API_BASE_URL.`
+}
+
 export function SecAgentHome() {
   const [phase, setPhase] = useState<Phase>('idle')
   const [target, setTarget] = useState('')
@@ -42,6 +61,13 @@ export function SecAgentHome() {
   const [chipIdx, setChipIdx] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
   const chipTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scanningRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      if (chipTimer.current) clearInterval(chipTimer.current)
+    }
+  }, [])
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -51,9 +77,9 @@ export function SecAgentHome() {
   useEffect(() => {
     if (USE_MOCK) return
     let cancelled = false
-    void getHealth().then((ok) => {
-      if (cancelled || ok) return
-      showToast('Backend not reachable — start FastAPI on :8000 or check VITE_API_BASE_URL.')
+    void checkApiHealth().then((h) => {
+      if (cancelled || h.ok) return
+      showToast(toastForApiHealth(h))
     })
     return () => {
       cancelled = true
@@ -92,6 +118,12 @@ export function SecAgentHome() {
     } catch (e) {
       clearInterval(progressTimer)
       const msg = e instanceof Error ? e.message : 'Request failed'
+      // #region agent log
+      agentDebugLog('D', 'SecAgentHome:runLiveFlow:catch', 'live flow error', {
+        errMsg: msg.slice(0, 200),
+        likelyNetwork: /fetch|network|Failed|load|CORS/i.test(msg),
+      })
+      // #endregion
       pushLine(`error: ${msg}`)
       showToast(msg.length > 90 ? `${msg.slice(0, 90)}…` : msg)
       setPhase('idle')
@@ -100,19 +132,31 @@ export function SecAgentHome() {
   }
 
   const startScan = async () => {
+    if (scanningRef.current) return
+    scanningRef.current = true
     const raw = target.trim()
     if (!raw) {
+      scanningRef.current = false
       showToast('Enter a URL or label first')
       return
     }
     if (!USE_MOCK) {
-      const ok = await getHealth()
-      if (!ok) {
-        showToast('Backend not reachable — start FastAPI on :8000 or check VITE_API_BASE_URL.')
+      const h = await checkApiHealth()
+      if (!h.ok) {
+        scanningRef.current = false
+        showToast(toastForApiHealth(h))
         return
       }
     }
     const note = normalizeTarget(raw)
+    // #region agent log
+    if (!USE_MOCK) {
+      agentDebugLog('A', 'SecAgentHome:startScan', 'live scan starting', {
+        noteLen: note.length,
+        origin: typeof window !== 'undefined' ? window.location.origin : '',
+      })
+    }
+    // #endregion
 
     setPhase('scanning')
     setLines([])
@@ -137,6 +181,7 @@ export function SecAgentHome() {
         clearInterval(chipTimer.current)
         chipTimer.current = null
       }
+      scanningRef.current = false
     }
   }
 

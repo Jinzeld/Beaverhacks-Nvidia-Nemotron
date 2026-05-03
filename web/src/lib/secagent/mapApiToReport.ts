@@ -1,15 +1,26 @@
 import type { ScanReportVM, SeverityUi, VulnerabilityVM } from './types'
 
-/** Backend finding shape from POST /api/review */
+/** Backend finding shape from POST /api/review (matches findings.py Finding.to_dict()) */
 export interface ApiFinding {
   finding_id: string
   title: string
   category: string
   severity: string
+  status?: string
   evidence: string
   affected_target: string
   recommendation: string
+  remediation_type?: string
   created_at?: string
+}
+
+/** Backend recommendation_summary from recommender.py RecommendationSummary.to_dict() */
+export interface ApiRecommendationSummary {
+  total_findings: number
+  highest_severity: string
+  counts_by_severity: Record<string, number>
+  priority_actions: string[]
+  overall_summary: string
 }
 
 export interface ApiReviewResponse {
@@ -17,34 +28,32 @@ export interface ApiReviewResponse {
   target_url?: string
   findings?: ApiFinding[]
   error?: string | null
+  recommendation_summary?: ApiRecommendationSummary
   [key: string]: unknown
 }
 
-/** Mirrors frontend/scan.js severityToUi (info/unknown → LOW). */
 function severityToUi(sev: string | undefined): SeverityUi {
-  const s = String(sev || 'low').toLowerCase()
-  if (s === 'high') return 'HIGH'
-  if (s === 'medium') return 'MEDIUM'
-  if (s === 'low') return 'LOW'
-  return 'LOW'
+  switch (String(sev || 'low').toLowerCase()) {
+    case 'critical': return 'CRITICAL'
+    case 'high':     return 'HIGH'
+    case 'medium':   return 'MEDIUM'
+    case 'info':     return 'INFO'
+    default:         return 'LOW'
+  }
 }
 
-/** Mirrors frontend/scan.js riskScoreFromFindings. */
 export function riskScoreFromFindings(findings: ApiFinding[]): number {
   if (!findings.length) return 0
-  const rank: Record<string, number> = { low: 1, medium: 2, high: 3, info: 0 }
+  const rank: Record<string, number> = { info: 0, low: 1, medium: 2, high: 3, critical: 4 }
   let maxR = 0
   for (const f of findings) {
     const r = rank[String(f.severity || 'low').toLowerCase()] ?? 1
     if (r > maxR) maxR = r
   }
-  const base = maxR === 3 ? 72 : maxR === 2 ? 48 : maxR === 1 ? 28 : 12
+  const base = maxR === 4 ? 85 : maxR === 3 ? 72 : maxR === 2 ? 48 : maxR === 1 ? 28 : 12
   return Math.min(95, base + Math.min(findings.length * 3, 18))
 }
 
-/**
- * Mirrors frontend/scan.js mapApiResponseToViewModel — single source for UI.
- */
 export function mapApiToReport(apiJson: ApiReviewResponse): ScanReportVM {
   const findings = apiJson.findings ?? []
   const targetUrl = apiJson.target_url ?? ''
@@ -57,13 +66,12 @@ export function mapApiToReport(apiJson: ApiReviewResponse): ScanReportVM {
         ? 'EXPOSED_HEADER'
         : 'MISCONFIGURATION'
     const sevUi = severityToUi(f.severity)
-    const desc = [f.title || '', f.evidence || ''].filter(Boolean).join('\n\n')
     return {
       id: f.finding_id || '',
       type,
       severity: sevUi,
-      description: desc,
-      impact: f.recommendation || '',
+      description: f.title || '',
+      impact: '',
       endpoint: f.affected_target || '',
       vulnerable_code: f.evidence || '',
       fix: f.recommendation
@@ -76,19 +84,26 @@ export function mapApiToReport(apiJson: ApiReviewResponse): ScanReportVM {
     }
   })
 
-  const tips: string[] = []
-  const seen = new Set<string>()
-  for (const f of findings) {
-    const r = f.recommendation
-    if (r && !seen.has(r)) {
-      seen.add(r)
-      tips.push(r)
-    }
-  }
+  // Prefer backend-computed priority_actions (severity-sorted); fall back to deduped recommendations.
+  const tips: string[] =
+    apiJson.recommendation_summary?.priority_actions?.length
+      ? apiJson.recommendation_summary.priority_actions
+      : (() => {
+          const seen = new Set<string>()
+          const out: string[] = []
+          for (const f of findings) {
+            if (f.recommendation && !seen.has(f.recommendation)) {
+              seen.add(f.recommendation)
+              out.push(f.recommendation)
+            }
+          }
+          return out
+        })()
 
-  let summary = `${findings.length} finding(s) from read-only header review.`
+  // Prefer backend overall_summary; fall back to a derived line.
+  const derivedSummary = `${findings.length} finding(s) from read-only header review.`
+  let summary = apiJson.recommendation_summary?.overall_summary || derivedSummary
   if (err) summary = `Error: ${err}. ${summary}`
-  if (apiJson.goal) summary += ` Goal: ${apiJson.goal}`
 
   const scannedAt = findings[0]?.created_at ?? new Date().toISOString()
 

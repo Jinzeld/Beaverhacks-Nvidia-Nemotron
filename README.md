@@ -59,7 +59,7 @@ pip install -r requirements.txt
 
 export NVIDIA_API_KEY="nvapi-xxxxxxxxxxxx"   # optional; planner falls back if unset
 
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Backend runs at `http://127.0.0.1:8000`  
@@ -70,10 +70,10 @@ API docs at `http://127.0.0.1:8000/docs`
 ```bash
 cd web
 npm install
-npm run dev
+npm run dev   # FastAPI on :8000 + Vite (requires backend deps / uvicorn)
 ```
 
-Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/). In local dev, leave `VITE_API_BASE_URL` empty so Vite proxies `/api` to the backend on port 8000. Set `VITE_USE_MOCK=false` in `web/.env` for live scans. See [`web/README.md`](web/README.md).
+Use `npm run dev:vite` only if the API is already running in another process. Open [http://127.0.0.1:5173/](http://127.0.0.1:5173/). Leave `VITE_API_BASE_URL` empty so Vite proxies `/api` to port 8000. Set `VITE_USE_MOCK=false` in `web/.env` for live scans. See [`web/README.md`](web/README.md).
 
 **Legacy static UI:** open `frontend/index.html` in a browser or `cd frontend && python -m http.server 3000` (no build; uses `frontend/scan.js`).
 

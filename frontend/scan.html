@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
     <title>SecAgent — Scan results</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <style>html,body{background-color:#070808}</style>
 </head>
 <body class="page-scan">
     <nav>
@@ -15,24 +20,31 @@
             <div class="nav-icon">S</div>
             <div>
                 <div class="nav-title">SecAgent</div>
-                <div class="nav-subtitle">NVIDIA NIM · Nemotron 3 Nano</div>
+                <div class="nav-subtitle">NVIDIA NIM · NEMOTRON 3 NANO</div>
             </div>
         </div>
-        <div class="nav-badge nav-badge-muted">Results</div>
+        <div class="nav-right-group">
+            <span class="nav-version">V0.4.2-EDGE</span>
+            <div class="nav-badge-outline">BEAVERHACKS 2026</div>
+        </div>
     </nav>
 
     <div class="scan-subhead fade-up">
-        <p class="scan-eyebrow">// Live analysis</p>
+        <p class="scan-eyebrow">Read-only · live output</p>
         <h1 class="scan-title">Target</h1>
         <p class="scan-target" id="scan-target-label">—</p>
-        <p class="scan-hint">With <code>USE_STATIC_MOCK = false</code> in <code>scan.js</code>, this page calls <code>POST /api/review</code> on the FastAPI server. The scanned host is <code>TARGET_URL</code> from the repo <code>.env</code>; the field you typed on the home page is only included in the review <code>goal</code> as context. CORS must allow your static origin (e.g. Live Server on port 5500).</p>
+        <p class="scan-hint">With <code>USE_STATIC_MOCK = false</code> in <code>scan.js</code>, this page calls <code>POST /api/review</code> on the FastAPI server. The scanned host comes from <code>TARGET_URL</code> / <code>APPROVED_TARGET_HOST</code> in the repo <code>.env</code>; the value you typed on the home page is only included in the review <code>goal</code> as context. Serve this folder over <strong>http</strong> (e.g. <code>python -m http.server</code> or Live Server); <code>file://</code> cannot call the API. CORS must allow your origin (e.g. <code>localhost:5500</code> or <code>127.0.0.1:5173</code> for the React app proxy — see backend <code>allow_origins</code>). Optional: set <code>window.__SECAGENT_API_BASE__</code> before <code>scan.js</code> loads to override the API base URL.</p>
     </div>
 
     <div class="scanner-wrap">
         <div class="console-wrap" id="console-wrap" style="display:block">
             <div class="console-header">
-                <div class="console-dot" id="console-dot"></div>
-                <div class="console-title">// Live Scan Output</div>
+                <div class="console-traffic" aria-hidden="true">
+                    <span class="traffic-dot traffic-red"></span>
+                    <span class="traffic-dot traffic-yellow"></span>
+                    <span class="traffic-dot traffic-green console-dot" id="console-dot"></span>
+                </div>
+                <div class="console-title">secagent — scan</div>
                 <div class="console-status" id="console-status">SCANNING...</div>
             </div>
             <div class="console" id="console-out"></div>
@@ -43,7 +55,7 @@
 
     <div class="ticker">
         <span class="ticker-inner">
-        SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·&nbsp;&nbsp;&nbsp;&nbsp;SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·
+        SECAGENT · READ-ONLY · HTTP SECURITY HEADERS · WILDCARD CORS · CONTROLLED INVENTORY · LAB DOTFILE · DIRECTORY LISTING · AGENT TRACE · NEMOTRON-3-NANO · MARKDOWN REPORT · BEAVERHACKS 2026 ·&nbsp;&nbsp;&nbsp;&nbsp;SECAGENT · READ-ONLY · HTTP SECURITY HEADERS · WILDCARD CORS · CONTROLLED INVENTORY · LAB DOTFILE · DIRECTORY LISTING · AGENT TRACE · NEMOTRON-3-NANO · MARKDOWN REPORT · BEAVERHACKS 2026 ·
         </span>
     </div>
 

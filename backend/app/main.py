@@ -25,6 +25,22 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+try:
+    import starlette
+
+    def _starlette_supports_cors_pna() -> bool:
+        try:
+            parts = starlette.__version__.split(".")
+            major = int(parts[0])
+            minor = int(parts[1]) if len(parts) > 1 else 0
+            return (major, minor) >= (0, 51)
+        except (TypeError, ValueError, IndexError):
+            return False
+
+    _STARLETTE_PNA = _starlette_supports_cors_pna()
+except ImportError:
+    _STARLETTE_PNA = False
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_DIR.parent
@@ -45,8 +61,7 @@ app = FastAPI(
 )
 
 # Allow local static frontends (other ports) to call the API during development.
-app.add_middleware(
-    CORSMiddleware,
+_cors_kw: Dict[str, Any] = dict(
     allow_origins=[
         "http://127.0.0.1:5500",
         "http://localhost:5500",
@@ -61,6 +76,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+if _STARLETTE_PNA:
+    _cors_kw["allow_private_network"] = True
+app.add_middleware(CORSMiddleware, **_cors_kw)
 
 
 class ReviewRequest(BaseModel):

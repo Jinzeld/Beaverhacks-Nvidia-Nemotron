@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
     <title>SecAgent — NVIDIA Nemotron Security Scanner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <style>html,body{background-color:#070808}</style>
 </head>
 <body>
     <nav>
@@ -12,29 +17,36 @@
             <div class="nav-icon">S</div>
             <div>
                 <div class="nav-title">SecAgent</div>
-                <div class="nav-subtitle">NVIDIA NIM · Nemotron 3 Nano</div>
+                <div class="nav-subtitle">NVIDIA NIM · NEMOTRON 3 NANO</div>
             </div>
         </div>
-        <div class="nav-badge">BeaverHacks 2026</div>
+        <div class="nav-right-group">
+            <span class="nav-version">V0.4.2-EDGE</span>
+            <div class="nav-badge-outline">BEAVERHACKS 2026</div>
+        </div>
     </nav>
 
     <div class="hero fade-up">
         <div class="hero-eyebrow"><span class="eyebrow-line"></span>AI-Powered Web Vulnerability Scanner<span class="eyebrow-line"></span></div>
         <h1>Scan any<br><em>URL</em> or <em>IP.</em></h1>
         <p>Enter a website or IP address. Nemotron analyzes it for SQL Injection, XSS, misconfigurations, exposed ports, and more.</p>
-        <p style="font-size:12px;color:var(--muted);max-width:520px;margin:14px auto 0;line-height:1.65">When live API mode is on (<code>USE_STATIC_MOCK = false</code> in <code>scan.js</code>), the read-only scan uses <code>TARGET_URL</code> from the server <code>.env</code>. The target field below is passed as context in the review goal only.</p>
+        <p style="font-size:12px;color:var(--muted);max-width:520px;margin:14px auto 0;line-height:1.65">When live API mode is on (<code>USE_STATIC_MOCK = false</code> in <code>scan.js</code>), the read-only scan uses <code>TARGET_URL</code> from the server <code>.env</code>. The target field below is passed as context in the review goal only. Serve over <strong>http</strong> (not <code>file://</code>) so the browser can reach the API.</p>
     </div>
 
     <div class="scanner-wrap">
         <div class="scanner-card fade-up delay-1">
-            <label class="scanner-label">// Target URL or IP Address</label>
+            <!-- Single form: Enter in the URL field and the Scan button both dispatch submit (one code path). -->
+            <form id="home-scan-form" novalidate>
+            <label class="scanner-label" for="url-input">// Target URL or IP Address</label>
 
             <div class="url-row">
                 <div class="url-prefix">TARGET://</div>
-                <input class="url-input" id="url-input" type="text"
+                <input class="url-input" id="url-input" name="target" type="text" autocomplete="off"
                     placeholder="example.com  or  192.168.1.1"
-                    onkeydown="if(event.key==='Enter') startScan()"/>
-                <button class="btn-scan" id="btn-scan" type="button" onclick="startScan()">⚡ Scan</button>
+                    enterkeyhint="go"/>
+                <!-- mousedown preventDefault stops focus/scroll-into-view on the submit control before navigation. -->
+                <button class="btn-scan" id="btn-scan" type="submit"
+                    onmousedown="event.preventDefault()">⚡ Scan</button>
             </div>
 
             <label class="scanner-label">// Scan Modules</label>
@@ -67,7 +79,7 @@
 
             <div class="model-row">
                 <span class="model-label">Model:</span>
-                <select class="model-select" id="model-select">
+                <select class="model-select" id="model-select" name="model">
                     <option value="nvidia/nemotron-3-nano-30b-a3b">Nemotron 3 Nano 30B-A3B</option>
                     <option value="nvidia/llama-3.1-nemotron-70b-instruct">Nemotron 70B Instruct</option>
                     <option value="nvidia/nemotron-4-340b-instruct">Nemotron 4 340B</option>
@@ -83,16 +95,26 @@
                     <span class="example-tag" onclick="setExample('scanme.nmap.org')">scanme.nmap.org</span>
                 </div>
             </div>
+            </form>
         </div>
     </div>
 
     <div class="ticker">
         <span class="ticker-inner">
-        SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·&nbsp;&nbsp;&nbsp;&nbsp;SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·
+        SECAGENT · READ-ONLY · HTTP SECURITY HEADERS · WILDCARD CORS · CONTROLLED INVENTORY · LAB DOTFILE · DIRECTORY LISTING · AGENT TRACE · NEMOTRON-3-NANO · MARKDOWN REPORT · BEAVERHACKS 2026 ·&nbsp;&nbsp;&nbsp;&nbsp;SECAGENT · READ-ONLY · HTTP SECURITY HEADERS · WILDCARD CORS · CONTROLLED INVENTORY · LAB DOTFILE · DIRECTORY LISTING · AGENT TRACE · NEMOTRON-3-NANO · MARKDOWN REPORT · BEAVERHACKS 2026 ·
         </span>
     </div>
 
     <div class="toast" id="toast"></div>
     <script src="home.js"></script>
+    <script>
+      if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+      window.addEventListener("DOMContentLoaded", function () {
+        window.scrollTo(0, 0);
+        requestAnimationFrame(function () {
+          window.scrollTo(0, 0);
+        });
+      });
+    </script>
 </body>
 </html>

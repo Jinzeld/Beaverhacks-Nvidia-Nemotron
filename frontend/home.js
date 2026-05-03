@@ -26,8 +26,41 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove("show"), 2800);
 }
 
+/**
+ * Freeze the layout scroll position so post-submit browser work (focus, scroll-into-view)
+ * cannot move the document before we navigate away.
+ */
+function lockDocumentScrollForNavigation() {
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  const root = document.documentElement;
+  root.style.overflow = "hidden";
+  root.style.position = "fixed";
+  root.style.top = "0";
+  root.style.left = "0";
+  root.style.right = "0";
+  root.style.width = "100%";
+}
+
+function goToScanPage() {
+  lockDocumentScrollForNavigation();
+  // Two frames: default actions and layout often run after the submit handler returns.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      window.location.assign("scan.html");
+    });
+  });
+}
+
 /** Saves scan params and opens the results page (scan.html). */
-function startScan() {
+function startScan(ev) {
+  if (ev && typeof ev.preventDefault === "function") {
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+
   const raw = document.getElementById("url-input").value.trim();
   const model = document.getElementById("model-select").value;
   const modules = getActiveModules();
@@ -52,5 +85,14 @@ function startScan() {
     return;
   }
 
-  window.location.href = "scan.html";
+  goToScanPage();
 }
+
+(function initHomeScanForm() {
+  const form = document.getElementById("home-scan-form");
+  if (!form) return;
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    startScan(e);
+  });
+})();
