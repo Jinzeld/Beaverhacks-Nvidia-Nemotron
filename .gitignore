@@ -1,8 +1,25 @@
-# Byte-compiled / optimized / DLL files
+# Python cache
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Envirenments
+# Virtual environments
+.venv/
 venv/
 env/
-.evn
-.venv
+
+# Secrets / local config
+.env
+*.pem
+
+# Runtime outputs
+reports/*.json
+reports/*.md
+reports/*.pdf
+audit_logs/*.jsonl
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
