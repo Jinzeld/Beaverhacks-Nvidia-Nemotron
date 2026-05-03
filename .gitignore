@@ -1,31 +1,15 @@
-# Python cache
+# Local secrets
+.env
+
+# Python virtual environments and cache
+.venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
 
-# Virtual environments
-.venv/
-venv/
-env/
+# Generated agent outputs
+reports/*
+audit_logs/*
 
-# Secrets / local config
-.env
-.env.local
-*.pem
-
-# Runtime outputs
-reports/*.json
-reports/*.md
-reports/*.pdf
-audit_logs/*.jsonl
-
-# Frontend dependencies / build outputs
-node_modules/
-dist/
-build/
-
-# OS / editor
-.DS_Store
-.vscode/
-.idea/
+# Keep empty output folders in repo if needed
+!reports/.gitkeep
+!audit_logs/.gitkeep

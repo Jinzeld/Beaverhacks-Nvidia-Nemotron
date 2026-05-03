@@ -5,6 +5,7 @@ The orchestrator implements a safe agent loop:
 Scope Check -> Ask Planner -> Validate Action -> Execute Tool -> Observe -> Report
 
 Nemotron may suggest the next safe action, but the backend enforces:
+- connect api key
 - allowlisted target only
 - registered read-only tools only
 - no arbitrary shell commands
