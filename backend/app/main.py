@@ -72,23 +72,35 @@ def load_environment() -> Dict[str, str]:
     """
     Load local .env configuration.
 
-    The frontend should not send TARGET_URL directly in MVP mode.
-    The backend reads the allowlisted target from .env.
+    We support both repo-root `.env` and `backend/.env` so local CLI,
+    FastAPI, and EC2 demos behave the same. Values in backend/.env override
+    repo-root values for developer convenience.
     """
 
-    env_path = PROJECT_ROOT / ".env"
+    project_env_path = PROJECT_ROOT / ".env"
+    backend_env_path = BACKEND_DIR / ".env"
 
-    if env_path.exists():
-        load_dotenv(dotenv_path=env_path)
+    if project_env_path.exists():
+        load_dotenv(dotenv_path=project_env_path, override=False)
+
+    if backend_env_path.exists():
+        load_dotenv(dotenv_path=backend_env_path, override=True)
 
     approved_target_host = os.getenv("APPROVED_TARGET_HOST", os.getenv("TARGET_HOST", "")).strip()
     target_url = os.getenv("TARGET_URL", "").strip()
     if not target_url and approved_target_host:
         target_url = f"http://{approved_target_host}:8088"
 
+    allowed_targets_raw = os.getenv("ALLOWED_TARGETS", "").strip()
+    allowed_targets = [item.strip() for item in allowed_targets_raw.split(",") if item.strip()]
+    for candidate in (approved_target_host, os.getenv("TARGET_HOST", "").strip()):
+        if candidate and candidate not in allowed_targets:
+            allowed_targets.append(candidate)
+
     return {
         "TARGET_URL": target_url,
         "APPROVED_TARGET_HOST": approved_target_host,
+        "ALLOWED_TARGETS": ",".join(allowed_targets),
         "READ_ONLY_MODE": os.getenv("READ_ONLY_MODE", "true").strip().lower(),
         "ENABLE_FIX_MODE": os.getenv("ENABLE_FIX_MODE", "false").strip().lower(),
         "ENABLE_FIREWALL_HARDENING": os.getenv(
@@ -96,6 +108,55 @@ def load_environment() -> Dict[str, str]:
         ).strip().lower(),
     }
 
+
+def normalize_target_host_input(value: str) -> str:
+    """Normalize UI input into a host/IP candidate.
+
+    The backend still enforces allowlisting. This helper only removes URL
+    scheme/path noise from the frontend input.
+    """
+
+    candidate = (value or "").strip()
+    if not candidate:
+        return ""
+
+    if candidate.startswith("http://") or candidate.startswith("https://"):
+        from urllib.parse import urlparse
+
+        parsed = urlparse(candidate)
+        return parsed.hostname or ""
+
+    return candidate.split("/", 1)[0].strip()
+
+
+def resolve_target_scope(env: Dict[str, str], requested_target_host: Optional[str]) -> Dict[str, str]:
+    """Return target_url and approved_target_host for this run.
+
+    If the UI sends a target, it must be present in ALLOWED_TARGETS or match
+    APPROVED_TARGET_HOST/TARGET_HOST. Otherwise the backend refuses the scan.
+    """
+
+    allowed_targets = [item for item in env.get("ALLOWED_TARGETS", "").split(",") if item]
+    requested = normalize_target_host_input(requested_target_host or "")
+
+    if requested:
+        if requested not in allowed_targets:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Target {requested} is not allowlisted. "
+                    "Set ALLOWED_TARGETS or APPROVED_TARGET_HOST in backend/.env."
+                ),
+            )
+        return {
+            "TARGET_URL": f"http://{requested}:8088",
+            "APPROVED_TARGET_HOST": requested,
+        }
+
+    return {
+        "TARGET_URL": env["TARGET_URL"],
+        "APPROVED_TARGET_HOST": env["APPROVED_TARGET_HOST"],
+    }
 
 def validate_read_only_mode(env: Dict[str, str]) -> None:
     """
@@ -183,29 +244,26 @@ def run_review(request: ReviewRequest) -> Dict[str, Any]:
     Run the read-only agentic security review.
 
     The frontend provides only a human-readable goal.
-    The target is still controlled by backend .env settings.
+    The actual target is controlled by backend .env settings.
     """
 
     env = load_environment()
     validate_read_only_mode(env)
+    scope = resolve_target_scope(env, request.target_host)
 
     trace_path = AUDIT_DIR / "agent_trace.jsonl"
+    report_path = REPORTS_DIR / "report.md"
 
     reset_trace_file(trace_path)
     trace_logger = AgentTraceLogger(trace_path)
 
-    approved_host = request.target_host or env["APPROVED_TARGET_HOST"]
-    target_url = env["TARGET_URL"]
-    if request.target_host:
-        target_url = f"http://{request.target_host}:8088"
-
     try:
         agent_result = run_agentic_security_review(
             goal=request.goal,
-            target_url=target_url,
-            approved_target_host=approved_host,
+            target_url=scope["TARGET_URL"],
+            approved_target_host=scope["APPROVED_TARGET_HOST"],
             trace_logger=trace_logger,
-            report_path=REPORTS_DIR / "report.md",
+            report_path=report_path,
             trace_path=trace_path,
         )
     except ValueError as exc:
@@ -216,9 +274,11 @@ def run_review(request: ReviewRequest) -> Dict[str, Any]:
     response = agent_result.to_dict()
     response["agent_run_json_path"] = str(output_path)
     response["trace_path"] = str(trace_path)
+    response["trace_events"] = read_trace_events(trace_path)
+    if report_path.exists():
+        response["report_markdown"] = report_path.read_text(encoding="utf-8")
 
     return response
-
 
 @app.get("/api/report")
 def get_latest_report() -> Dict[str, str]:
