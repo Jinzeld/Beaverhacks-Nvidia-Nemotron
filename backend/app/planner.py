@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from app.nemotron_client import call_nemotron
 
@@ -39,11 +39,17 @@ def relevant_checks_remaining(state: Dict[str, Any]) -> bool:
     if "nmap_scan" not in completed:
         return True
 
+    # Required MVP finding source must not depend on Nmap succeeding.
+    # TARGET_URL is already allowlisted by the backend, so always run the
+    # HTTP header review once after service inventory.
+    if "http_header_check" not in completed:
+        return True
+
     if service_is_open(state, 21) and "ftp_anonymous_check" not in completed:
         return True
 
     if service_is_open(state, 8088):
-        for action in ("http_header_check", "exposed_env_check", "directory_listing_check"):
+        for action in ("exposed_env_check", "directory_listing_check"):
             if action not in completed:
                 return True
 
@@ -63,38 +69,58 @@ def deterministic_next_action(state: Dict[str, Any], target_host: str) -> Dict[s
     if "nmap_scan" not in completed:
         return {
             "phase": "PLAN",
-            "reason": "No service discovery has been completed yet, so the first safe step is Nmap service discovery on the allowed demo ports.",
+            "reason": (
+                "No service discovery has been completed yet, so the first safe step "
+                "is controlled Nmap service inventory on fixed demo ports."
+            ),
             "action": "nmap_scan",
             "args": {"target_host": target_host, "ports": [21, 8088, 8090]},
+        }
+
+    # Always run required HTTP header review against the configured lab target.
+    # This keeps the MVP stable even if Nmap is missing or returns no services.
+    if "http_header_check" not in completed:
+        return {
+            "phase": "DECIDE",
+            "reason": (
+                "The configured TARGET_URL is allowlisted, so the agent will always "
+                "audit HTTP security headers and wildcard CORS even if service inventory "
+                "is unavailable."
+            ),
+            "action": "http_header_check",
+            "args": {"url": f"http://{target_host}:8088", "port": 8088},
         }
 
     if service_is_open(state, 21) and "ftp_anonymous_check" not in completed:
         return {
             "phase": "DECIDE",
-            "reason": "FTP is open on port 21, so the next safe external check is anonymous login validation.",
+            "reason": (
+                "FTP is open on port 21, so the next safe external check is anonymous "
+                "login validation without brute force."
+            ),
             "action": "ftp_anonymous_check",
             "args": {"target_host": target_host, "port": 21},
         }
 
     if service_is_open(state, 8088):
-        if "http_header_check" not in completed:
-            return {
-                "phase": "DECIDE",
-                "reason": "HTTP is open on port 8088, so the agent will audit security headers and wildcard CORS.",
-                "action": "http_header_check",
-                "args": {"url": f"http://{target_host}:8088", "port": 8088},
-            }
         if "exposed_env_check" not in completed:
             return {
                 "phase": "DECIDE",
-                "reason": "HTTP is open on port 8088, so the agent will check for exposed dotfiles such as .env.",
+                "reason": (
+                    "HTTP is open on port 8088, so the agent will check for exposed "
+                    "dotfiles such as .env."
+                ),
                 "action": "exposed_env_check",
                 "args": {"url": f"http://{target_host}:8088", "port": 8088},
             }
+
         if "directory_listing_check" not in completed:
             return {
                 "phase": "DECIDE",
-                "reason": "HTTP is open on port 8088, so the agent will check for directory listing exposure.",
+                "reason": (
+                    "HTTP is open on port 8088, so the agent will check for directory "
+                    "listing exposure."
+                ),
                 "action": "directory_listing_check",
                 "args": {"url": f"http://{target_host}:8088", "port": 8088},
             }
@@ -103,21 +129,31 @@ def deterministic_next_action(state: Dict[str, Any], target_host: str) -> Dict[s
         if "debug_endpoint_check" not in completed:
             return {
                 "phase": "DECIDE",
-                "reason": "A web application is open on port 8090, so the agent will check for exposed debug information.",
+                "reason": (
+                    "A web application is open on port 8090, so the agent will check "
+                    "for exposed debug information."
+                ),
                 "action": "debug_endpoint_check",
                 "args": {"url": f"http://{target_host}:8090", "port": 8090},
             }
+
         if "reflection_check" not in completed:
             return {
                 "phase": "DECIDE",
-                "reason": "A web application is open on port 8090, so the agent will run a safe canary reflection check.",
+                "reason": (
+                    "A web application is open on port 8090, so the agent will run a "
+                    "safe canary reflection check."
+                ),
                 "action": "reflection_check",
                 "args": {"url": f"http://{target_host}:8090", "port": 8090},
             }
 
     return {
         "phase": "REPORT",
-        "reason": "All relevant checks for discovered services are complete, so the agent will generate the final report.",
+        "reason": (
+            "All relevant checks for discovered services are complete, so the agent "
+            "will generate the final report."
+        ),
         "action": "generate_report",
         "args": {"target_host": target_host},
     }
@@ -125,6 +161,7 @@ def deterministic_next_action(state: Dict[str, Any], target_host: str) -> Dict[s
 
 def extract_json_object(text: str) -> Dict[str, Any]:
     text = text.strip()
+
     try:
         return json.loads(text)
     except Exception:
@@ -149,6 +186,7 @@ Rules:
 - Do not suggest arbitrary shell commands.
 - Choose exactly one next action from the allowed action list.
 - If no service discovery has been completed, choose nmap_scan.
+- After service discovery, choose http_header_check once against the allowlisted TARGET_URL even if service discovery found no services.
 - If all relevant checks are complete, choose generate_report.
 
 Allowed actions:
@@ -158,7 +196,7 @@ generate_report, finish
 
 Return format:
 {"phase":"PLAN|DECIDE|ACTION|REPORT","reason":"short visible reason","action":"allowed_action","args":{}}
-"""
+""".strip()
 
     compact_state = {
         "target_host": target_host,
@@ -184,10 +222,15 @@ Return format:
         temperature=0.1,
         max_tokens=600,
     )
+
     return extract_json_object(raw)
 
 
-def validate_or_fallback(decision: Dict[str, Any], state: Dict[str, Any], target_host: str) -> Dict[str, Any]:
+def validate_or_fallback(
+    decision: Dict[str, Any],
+    state: Dict[str, Any],
+    target_host: str,
+) -> Dict[str, Any]:
     action = decision.get("action")
     args = decision.get("args") or {}
 
@@ -204,7 +247,10 @@ def validate_or_fallback(decision: Dict[str, Any], state: Dict[str, Any], target
         return deterministic_next_action(state, target_host)
 
     if "url" in args:
-        allowed_prefixes = [f"http://{target_host}:8088", f"http://{target_host}:8090"]
+        allowed_prefixes = [
+            f"http://{target_host}:8088",
+            f"http://{target_host}:8090",
+        ]
         if not any(str(args["url"]).startswith(prefix) for prefix in allowed_prefixes):
             return deterministic_next_action(state, target_host)
 

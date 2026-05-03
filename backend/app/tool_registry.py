@@ -7,7 +7,15 @@ from typing import Any, Dict, Literal
 
 
 ToolRiskLevel = Literal["safe-read-only", "approval-required", "disabled"]
-ToolCategory = Literal["discovery", "ftp", "http", "web", "linux_posture", "windows_import", "report"]
+ToolCategory = Literal[
+    "discovery",
+    "ftp",
+    "http",
+    "web",
+    "linux_posture",
+    "windows_import",
+    "report",
+]
 
 
 @dataclass(frozen=True)
@@ -26,19 +34,28 @@ class ToolDefinition:
 
 def get_tool_registry() -> Dict[str, ToolDefinition]:
     """
-    Return all backend-known tools. User prompts and Nemotron responses cannot
-    create tools or change this registry.
+    Return all backend-known tools.
+
+    User prompts and Nemotron responses cannot create tools or change this
+    registry. The backend remains authoritative.
     """
 
     return {
         "nmap_scan": ToolDefinition(
             name="nmap_scan",
-            description="Run constrained Nmap service discovery on allowed demo ports 21, 8088, and 8090.",
+            description=(
+                "Run optional constrained Nmap service inventory on allowed demo "
+                "ports 21, 8088, and 8090. Requires the system nmap binary; the "
+                "required HTTP header check still runs if Nmap is missing."
+            ),
             category="discovery",
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"target_host": "Must equal approved target host"},
+            allowed_inputs={
+                "target_host": "Must equal approved target host",
+                "ports": "Fixed backend-controlled set: 21, 8088, 8090",
+            },
         ),
         "ftp_anonymous_check": ToolDefinition(
             name="ftp_anonymous_check",
@@ -47,7 +64,10 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"target_host": "Must equal approved target host", "port": "21 only"},
+            allowed_inputs={
+                "target_host": "Must equal approved target host",
+                "port": "21 only",
+            },
         ),
         "http_header_check": ToolDefinition(
             name="http_header_check",
@@ -56,7 +76,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"url": "http://approved-host:8088"},
+            allowed_inputs={
+                "url": "http://approved-host:8088",
+            },
         ),
         "http_header_scan": ToolDefinition(
             name="http_header_scan",
@@ -65,7 +87,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"target_url": "Must match configured TARGET_URL"},
+            allowed_inputs={
+                "target_url": "Must match configured TARGET_URL",
+            },
         ),
         "exposed_env_check": ToolDefinition(
             name="exposed_env_check",
@@ -74,7 +98,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"url": "http://approved-host:8088"},
+            allowed_inputs={
+                "url": "http://approved-host:8088",
+            },
         ),
         "directory_listing_check": ToolDefinition(
             name="directory_listing_check",
@@ -83,7 +109,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"url": "http://approved-host:8088"},
+            allowed_inputs={
+                "url": "http://approved-host:8088",
+            },
         ),
         "debug_endpoint_check": ToolDefinition(
             name="debug_endpoint_check",
@@ -92,7 +120,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"url": "http://approved-host:8090"},
+            allowed_inputs={
+                "url": "http://approved-host:8090",
+            },
         ),
         "reflection_check": ToolDefinition(
             name="reflection_check",
@@ -101,7 +131,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"url": "http://approved-host:8090/search?q=NEMO_AUDIT_CANARY"},
+            allowed_inputs={
+                "url": "http://approved-host:8090/search?q=NEMO_AUDIT_CANARY",
+            },
         ),
         "markdown_report_generator": ToolDefinition(
             name="markdown_report_generator",
@@ -110,7 +142,11 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"findings": "Structured findings", "agent_trace": "Visible trace", "report_path": "Controlled reports path"},
+            allowed_inputs={
+                "findings": "Structured findings",
+                "agent_trace": "Visible trace",
+                "report_path": "Controlled reports path",
+            },
         ),
         "generate_report": ToolDefinition(
             name="generate_report",
@@ -119,7 +155,10 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=True,
             risk_level="safe-read-only",
-            allowed_inputs={"findings": "Structured findings", "agent_trace": "Visible trace"},
+            allowed_inputs={
+                "findings": "Structured findings",
+                "agent_trace": "Visible trace",
+            },
         ),
         "linux_listening_ports_readonly": ToolDefinition(
             name="linux_listening_ports_readonly",
@@ -128,7 +167,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=False,
             risk_level="safe-read-only",
-            allowed_inputs={"host": "Controlled agent VM only"},
+            allowed_inputs={
+                "host": "Controlled agent VM only",
+            },
         ),
         "windows_posture_json_import": ToolDefinition(
             name="windows_posture_json_import",
@@ -137,7 +178,9 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
             read_only=True,
             enabled=False,
             risk_level="safe-read-only",
-            allowed_inputs={"json_path": "Path to manually generated JSON"},
+            allowed_inputs={
+                "json_path": "Path to manually generated JSON",
+            },
         ),
     }
 
@@ -154,6 +197,7 @@ def require_enabled_tool(tool_name: str) -> ToolDefinition:
         raise ValueError(f"Tool is not registered: {tool_name}")
 
     tool = registry[tool_name]
+
     if not tool.enabled:
         raise ValueError(f"Tool is registered but disabled in this phase: {tool_name}")
 
