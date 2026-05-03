@@ -67,6 +67,21 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
                 "approved_target_host": "Must match APPROVED_TARGET_HOST",
             },
         ),
+        "markdown_report_generator": ToolDefinition(
+            name="markdown_report_generator",
+            description=(
+                "Generate a Markdown report from structured findings and agent trace data."
+            ),
+            category="report",
+            read_only=True,
+            enabled=True,
+            risk_level="safe-read-only",
+            allowed_inputs={
+                "findings": "Structured finding list",
+                "agent_trace": "Structured agent trace",
+                "report_path": "Controlled reports directory path",
+            },
+        ),
         "linux_listening_ports_readonly": ToolDefinition(
             name="linux_listening_ports_readonly",
             description=(
@@ -109,26 +124,12 @@ def get_tool_registry() -> Dict[str, ToolDefinition]:
                 "json_path": "Path to manually generated Windows posture JSON",
             },
         ),
-        "markdown_report_generator": ToolDefinition(
-            name="markdown_report_generator",
-            description="Future tool that writes a Markdown security posture report.",
-            category="report",
-            read_only=True,
-            enabled=False,
-            risk_level="safe-read-only",
-            allowed_inputs={
-                "findings": "Structured finding list",
-                "agent_trace": "Structured agent trace",
-            },
-        ),
     }
 
 
 def list_enabled_tools() -> Dict[str, ToolDefinition]:
     """
     Return only tools enabled for the current phase.
-
-    In the current MVP phase, only http_header_scan is enabled.
     """
 
     registry = get_tool_registry()

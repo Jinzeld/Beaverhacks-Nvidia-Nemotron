@@ -8,6 +8,7 @@ Current Phase:
 - Validates read-only MVP mode
 - Runs the lightweight agentic workflow
 - Writes reports/agent_run.json
+- Writes reports/report.md
 - Writes audit_logs/agent_trace.jsonl
 
 It does NOT:
@@ -30,15 +31,11 @@ from typing import Dict
 from dotenv import load_dotenv
 
 
-# Resolve important project paths.
-# This lets the script work when run from the project root:
-# python backend/run_pipeline.py
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_DIR.parent
 REPORTS_DIR = PROJECT_ROOT / "reports"
 AUDIT_DIR = PROJECT_ROOT / "audit_logs"
 
-# Add backend/ to Python import path so we can import app.* modules.
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.agent_orchestrator import run_agentic_security_review  # noqa: E402
@@ -100,7 +97,6 @@ def reset_trace_file(trace_path: Path) -> None:
     Clear the previous trace before each run.
 
     This keeps demo output easy to read.
-    Later, we can switch to append-only history if needed.
     """
 
     trace_path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,11 +106,6 @@ def reset_trace_file(trace_path: Path) -> None:
 def write_agent_run_json(agent_result: object) -> Path:
     """
     Save the full agent result as JSON.
-
-    This file is useful for:
-    - debugging
-    - report generation
-    - sending structured data to Nemotron in a later phase
     """
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -127,11 +118,13 @@ def write_agent_run_json(agent_result: object) -> Path:
 
 
 def print_banner(env: Dict[str, str]) -> None:
-    """Print project identity and safety mode."""
+    """
+    Print project identity and safety mode.
+    """
 
     print("Nemotron VM Fix Agent")
     print("=" * 28)
-    print("Updated Phase 2: Agentic read-only backend")
+    print("Phase 3: Agentic read-only backend with Markdown report")
     print()
     print("Positioning:")
     print("- Defensive VM security advisor")
@@ -200,8 +193,14 @@ def print_agent_result(agent_result: object, output_path: Path, trace_path: Path
             print(f"  Recommendation: {finding.recommendation}")
             print()
 
+    print("Recommendation Summary:")
+    print(f"- Total findings: {agent_result.recommendation_summary['total_findings']}")
+    print(f"- Highest severity: {agent_result.recommendation_summary['highest_severity']}")
+    print()
+
     print("Outputs:")
     print(f"- Agent run JSON: {output_path}")
+    print(f"- Markdown report: {agent_result.report_path}")
     print(f"- Agent trace JSONL: {trace_path}")
     print()
 
@@ -230,6 +229,8 @@ def main() -> int:
         return 1
 
     trace_path = AUDIT_DIR / "agent_trace.jsonl"
+    report_path = REPORTS_DIR / "report.md"
+
     reset_trace_file(trace_path)
     trace_logger = AgentTraceLogger(trace_path)
 
@@ -239,6 +240,8 @@ def main() -> int:
             target_url=env["TARGET_URL"],
             approved_target_host=env["APPROVED_TARGET_HOST"],
             trace_logger=trace_logger,
+            report_path=report_path,
+            trace_path=trace_path,
         )
     except ValueError as exc:
         print("[SCOPE ERROR]")

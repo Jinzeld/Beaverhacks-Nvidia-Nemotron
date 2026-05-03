@@ -8,10 +8,10 @@ __pycache__/
 .venv/
 venv/
 env/
-.evn
 
 # Secrets / local config
 .env
+.env.local
 *.pem
 
 # Runtime outputs
@@ -20,10 +20,12 @@ reports/*.md
 reports/*.pdf
 audit_logs/*.jsonl
 
+# Frontend dependencies / build outputs
+node_modules/
+dist/
+build/
+
 # OS / editor
 .DS_Store
 .vscode/
 .idea/
-
-# Cursor / Claude local project config
-.claude/
