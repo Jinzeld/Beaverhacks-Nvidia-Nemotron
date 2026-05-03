@@ -4,10 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:api\" \"wait-on -t 120000 http-get://127.0.0.1:8000/api/health && node scripts/dev-preflight.mjs && vite\"",
-    "dev:vite": "node scripts/dev-preflight.mjs && vite",
-    "dev:api": "cd ../backend && python3 -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
-    "dev:full": "npm run dev",
+    "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -27,7 +24,6 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "concurrently": "^9.2.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
@@ -35,7 +31,6 @@
     "tailwindcss": "^4.2.4",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10",
-    "wait-on": "^8.0.5"
+    "vite": "^8.0.10"
   }
 }

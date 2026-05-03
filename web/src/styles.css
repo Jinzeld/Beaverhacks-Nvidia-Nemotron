@@ -53,6 +53,23 @@
   }
 }
 
+@keyframes pulse-ring {
+  from {
+    stroke-dashoffset: 283;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes hero-type-in {
   from {
     opacity: 0;

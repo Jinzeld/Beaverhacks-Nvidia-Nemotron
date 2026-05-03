@@ -1,4 +1,3 @@
-import { agentDebugLog } from './agentDebug'
 import type { ApiReviewResponse } from './mapApiToReport'
 
 function apiBase(): string {
@@ -26,92 +25,23 @@ export async function parseErrorBody(resp: Response): Promise<string> {
   }
 }
 
-/** Result of GET /api/health for UI messaging (e.g. 502 = proxy cannot reach FastAPI). */
-export type ApiHealthResult =
-  | { ok: true }
-  | { ok: false; httpStatus?: number; fetchFailed: boolean; errMsg?: string }
-
-export async function checkApiHealth(): Promise<ApiHealthResult> {
-  const base = apiBase()
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const resolvedUrl = url('/api/health')
+export async function getHealth(): Promise<boolean> {
   try {
-    const r = await fetch(resolvedUrl)
-    if (!r.ok) {
-      // #region agent log
-      agentDebugLog('B', 'api.ts:getHealth', 'GET /api/health response not ok', {
-        healthy: false,
-        httpStatus: r.status,
-        apiBaseSet: Boolean(base),
-        resolvedUrl,
-        origin,
-      })
-      // #endregion
-      return { ok: false, httpStatus: r.status, fetchFailed: false }
-    }
-    // #region agent log
-    agentDebugLog('B', 'api.ts:getHealth', 'GET /api/health ok', {
-      healthy: true,
-      httpStatus: r.status,
-      apiBaseSet: Boolean(base),
-      origin,
-    })
-    // #endregion
-    return { ok: true }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    // #region agent log
-    agentDebugLog('B', 'api.ts:getHealth', 'GET /api/health fetch threw', {
-      healthy: false,
-      errMsg: msg.slice(0, 160),
-      apiBaseSet: Boolean(base),
-      resolvedUrl,
-      origin,
-    })
-    // #endregion
-    return { ok: false, fetchFailed: true, errMsg: msg.slice(0, 200) }
+    const r = await fetch(url('/api/health'))
+    return r.ok
+  } catch {
+    return false
   }
 }
 
-export async function postReview(goal: string): Promise<ApiReviewResponse> {
-  const base = apiBase()
-  let resp: Response
-  try {
-    resp = await fetch(url('/api/review'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ goal }),
-    })
-  } catch (e) {
-    // #region agent log
-    const msg = e instanceof Error ? e.message : String(e)
-    agentDebugLog('C', 'api.ts:postReview', 'fetch threw', {
-      errMsg: msg.slice(0, 200),
-      apiBaseSet: Boolean(base),
-      likelyNetwork: /fetch|network|Failed|load|CORS/i.test(msg),
-    })
-    // #endregion
-    throw e
-  }
-  // #region agent log
-  agentDebugLog('D', 'api.ts:postReview', 'POST /api/review response', {
-    status: resp.status,
-    ok: resp.ok,
-    apiBaseSet: Boolean(base),
+export async function postReview(goal: string, targetHost?: string): Promise<ApiReviewResponse> {
+  const resp = await fetch(url('/api/review'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal, target_host: targetHost || undefined }),
   })
-  // #endregion
   if (!resp.ok) throw new Error(await parseErrorBody(resp))
-  const json = (await resp.json()) as ApiReviewResponse & {
-    findings?: unknown[]
-    error?: unknown
-  }
-  // #region agent log
-  agentDebugLog('E', 'api.ts:postReview', 'parsed review JSON', {
-    findingsLen: Array.isArray(json.findings) ? json.findings.length : -1,
-    hasError: json.error != null,
-  })
-  // #endregion
-  return json
+  return (await resp.json()) as ApiReviewResponse
 }
 
 export async function getReportMarkdown(): Promise<string> {
@@ -119,4 +49,12 @@ export async function getReportMarkdown(): Promise<string> {
   if (!resp.ok) throw new Error(await parseErrorBody(resp))
   const data = (await resp.json()) as { report_markdown?: string }
   return data.report_markdown ?? ''
+}
+
+
+export async function getTraceEvents(): Promise<unknown[]> {
+  const resp = await fetch(url('/api/trace'))
+  if (!resp.ok) throw new Error(await parseErrorBody(resp))
+  const data = (await resp.json()) as { events?: unknown[] }
+  return data.events ?? []
 }
