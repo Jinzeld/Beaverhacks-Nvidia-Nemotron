@@ -22,6 +22,7 @@ from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 
@@ -41,6 +42,24 @@ app = FastAPI(
     title="Nemotron VM Fix Agent API",
     description="Defensive agentic VM security advisor API.",
     version="0.3.0",
+)
+
+# Allow local static frontends (other ports) to call the API during development.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -165,7 +184,6 @@ def run_review(request: ReviewRequest) -> Dict[str, Any]:
     validate_read_only_mode(env)
 
     trace_path = AUDIT_DIR / "agent_trace.jsonl"
-    report_path = REPORTS_DIR / "report.md"
 
     reset_trace_file(trace_path)
     trace_logger = AgentTraceLogger(trace_path)
@@ -176,8 +194,6 @@ def run_review(request: ReviewRequest) -> Dict[str, Any]:
             target_url=env["TARGET_URL"],
             approved_target_host=env["APPROVED_TARGET_HOST"],
             trace_logger=trace_logger,
-            report_path=report_path,
-            trace_path=trace_path,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

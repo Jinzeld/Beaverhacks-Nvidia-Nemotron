@@ -25,7 +25,7 @@
         <p class="scan-eyebrow">// Live analysis</p>
         <h1 class="scan-title">Target</h1>
         <p class="scan-target" id="scan-target-label">—</p>
-        <p class="scan-hint">Static preview: results are sample data until the API is connected. Set <code>USE_STATIC_MOCK = false</code> in <code>scan.js</code> when the backend is ready.</p>
+        <p class="scan-hint">With <code>USE_STATIC_MOCK = false</code> in <code>scan.js</code>, this page calls <code>POST /api/review</code> on the FastAPI server. The scanned host is <code>TARGET_URL</code> from the repo <code>.env</code>; the field you typed on the home page is only included in the review <code>goal</code> as context. CORS must allow your static origin (e.g. Live Server on port 5500).</p>
     </div>
 
     <div class="scanner-wrap">

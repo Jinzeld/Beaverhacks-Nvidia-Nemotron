@@ -1,11 +1,10 @@
 /**
- * Results page: static mock by default. Replace runLiveScan() body when backend exists.
- * Contract matches frontend/script expectations (see runLiveScan SSE parsing).
+ * Results page: mock scan or live FastAPI POST /api/review + GET /api/report.
  */
 const SCAN_PAYLOAD_KEY = "secagent_scan";
 const BACKEND = "http://localhost:8000";
 
-/** Set false when POST /scan/url/stream is ready. */
+/** true = offline mock; false = POST /api/review (requires backend + .env). */
 const USE_STATIC_MOCK = true;
 
 let lastResult = null;
@@ -42,13 +41,105 @@ function loadPayload() {
   }
 }
 
+async function parseErrorBody(resp) {
+  const text = await resp.text().catch(() => "");
+  try {
+    const j = JSON.parse(text);
+    if (j.detail !== undefined) {
+      return typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    }
+    return text || `HTTP ${resp.status}`;
+  } catch {
+    return text || `HTTP ${resp.status}`;
+  }
+}
+
+/** Map backend severity to CSS pill class (no .sev-INFO in stylesheet). */
+function severityToUi(sev) {
+  const s = String(sev || "low").toLowerCase();
+  if (s === "high") return "HIGH";
+  if (s === "medium") return "MEDIUM";
+  if (s === "low") return "LOW";
+  return "LOW";
+}
+
+function riskScoreFromFindings(findings) {
+  if (!findings || !findings.length) return 0;
+  const rank = { low: 1, medium: 2, high: 3, info: 0 };
+  let maxR = 0;
+  findings.forEach((f) => {
+    const r = rank[String(f.severity || "low").toLowerCase()] ?? 1;
+    if (r > maxR) maxR = r;
+  });
+  const base = maxR === 3 ? 72 : maxR === 2 ? 48 : maxR === 1 ? 28 : 12;
+  return Math.min(95, base + Math.min(findings.length * 3, 18));
+}
+
+/**
+ * Map POST /api/review JSON to the shape expected by renderResults().
+ */
+function mapApiResponseToViewModel(apiJson) {
+  const findings = apiJson.findings || [];
+  const targetUrl = apiJson.target_url || "";
+  const err = apiJson.error;
+
+  const vulnerabilities = findings.map((f) => {
+    const cat = String(f.category || "").toLowerCase();
+    const type =
+      cat.includes("http") || (f.title || "").toLowerCase().includes("header")
+        ? "EXPOSED_HEADER"
+        : "MISCONFIGURATION";
+    const sevUi = severityToUi(f.severity);
+    const desc = [f.title || "", f.evidence || ""].filter(Boolean).join("\n\n");
+    return {
+      id: f.finding_id || "",
+      type,
+      severity: sevUi,
+      description: desc,
+      impact: f.recommendation || "",
+      endpoint: f.affected_target || "",
+      vulnerable_code: f.evidence || "",
+      fix: f.recommendation
+        ? { explanation: f.recommendation, patched_code: "", additional_steps: [] }
+        : undefined,
+    };
+  });
+
+  const tips = [];
+  const seen = new Set();
+  findings.forEach((f) => {
+    const r = f.recommendation;
+    if (r && !seen.has(r)) {
+      seen.add(r);
+      tips.push(r);
+    }
+  });
+
+  let summary = `${findings.length} finding(s) from read-only header review.`;
+  if (err) summary = `Error: ${err}. ` + summary;
+  if (apiJson.goal) summary += ` Goal: ${apiJson.goal}`;
+
+  const scannedAt =
+    (findings[0] && findings[0].created_at) || new Date().toISOString();
+
+  return {
+    target: targetUrl,
+    summary,
+    risk_score: riskScoreFromFindings(findings),
+    scanned_at: scannedAt,
+    model_used: "Nemotron VM Fix Agent (read-only API)",
+    vulnerabilities,
+    secure_coding_tips: tips.slice(0, 6),
+  };
+}
+
 /** Deterministic mock result for UI demo (no network). */
 function buildMockResult(target, modules, model) {
   const ts = new Date().toISOString();
   return {
     target,
     summary:
-      "Static preview: sample findings for layout testing. Connect the backend and set USE_STATIC_MOCK = false.",
+      "Static preview: sample findings for layout testing. Set USE_STATIC_MOCK = false in scan.js to call the API.",
     risk_score: 62,
     scanned_at: ts,
     model_used: model + " (mock)",
@@ -133,14 +224,9 @@ async function runMockScan(payload) {
   renderResults(result);
 }
 
-/**
- * Live SSE scan — wire when backend implements POST /scan/url/stream
- * (same line protocol as before: lines starting with "data: " + JSON).
- */
-async function runLiveScan(payload) {
+async function runApiReview(payload) {
   const co = document.getElementById("console-out");
   const { target, modules, model } = payload;
-  lastTarget = target;
 
   document.getElementById("console-wrap").style.display = "block";
   document.getElementById("results-wrap").style.display = "none";
@@ -149,59 +235,55 @@ async function runLiveScan(payload) {
   document.getElementById("console-dot").style.animation = "";
   lastResult = null;
 
-  log(`[*] Target   : ${target}`);
-  log(`[*] Modules  : ${modules.join(", ")}`);
-  log(`[*] Model    : ${model}`);
-  log(`[*] Sending to backend…\n`);
+  const goal = [
+    "Read-only security review (MVP).",
+    `UI modules: ${modules.join(", ")}.`,
+    `User context / note: ${target}.`,
+    `Model selection (UI only): ${model}.`,
+  ].join(" ");
+
+  log(`[*] POST ${BACKEND}/api/review`);
+  log(`[*] Modules (context): ${modules.join(", ")}`);
+  log(`[*] Note: actual TARGET_URL comes from server .env\n`);
 
   try {
-    const resp = await fetch(`${BACKEND}/scan/url/stream`, {
+    const resp = await fetch(`${BACKEND}/api/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target, modules, model }),
+      body: JSON.stringify({ goal }),
     });
 
     if (!resp.ok) {
-      const errText = await resp.text().catch(() => "");
-      throw new Error(errText || `HTTP ${resp.status}`);
+      const msg = await parseErrorBody(resp);
+      throw new Error(msg);
     }
 
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    const apiJson = await resp.json();
+    log("[*] Response received, mapping results…\n");
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        let data;
-        try {
-          data = JSON.parse(line.slice(6));
-        } catch {
-          continue;
-        }
-        if (data.type === "token") {
-          co.textContent += data.content;
-          co.scrollTop = co.scrollHeight;
-        } else if (data.type === "progress") {
-          log(data.message);
-        } else if (data.type === "done") {
-          lastResult = data.result;
-          document.getElementById("console-status").textContent = "COMPLETE ✓";
-          document.getElementById("console-dot").style.animation = "none";
-          renderResults(data.result);
-        } else if (data.type === "error") {
-          showToast("Error: " + data.message);
-        }
-      }
+    const narrative =
+      "Review complete. Findings reflect HTTP headers from the configured server target.\n";
+    for (const ch of narrative) {
+      co.textContent += ch;
+      co.scrollTop = co.scrollHeight;
+      await delay(10);
     }
+
+    lastTarget = apiJson.target_url || target;
+    const vm = mapApiResponseToViewModel(apiJson);
+    lastResult = vm;
+
+    const label = document.getElementById("scan-target-label");
+    if (label) label.textContent = lastTarget;
+
+    document.getElementById("console-status").textContent = "COMPLETE ✓";
+    document.getElementById("console-dot").style.animation = "none";
+    renderResults(vm);
   } catch (e) {
-    showToast("Connection error — is the backend running?");
+    showToast("Request failed — check backend, .env, and CORS origin.");
     log(`\n[✗] ${e.message}`);
+    document.getElementById("console-status").textContent = "FAILED";
+    document.getElementById("console-dot").style.animation = "none";
   }
 }
 
@@ -297,7 +379,9 @@ function renderResults(result) {
           ${fix.additional_steps && fix.additional_steps.length ? `
           <div class="section-label">// Steps</div>
           <ul class="steps-list">${fix.additional_steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
-          ` : ""}
+          ` : fix.explanation ? `
+          <div class="section-label">// Fix Explanation</div>
+          <div class="vuln-desc">${esc(fix.explanation)}</div>` : ""}
         </div>
       </div>`;
     });
@@ -361,16 +445,19 @@ async function downloadReport() {
   if (!lastResult) return;
   if (!USE_STATIC_MOCK) {
     try {
-      const resp = await fetch(`${BACKEND}/report/url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: lastTarget, result: lastResult }),
-      });
-      const blob = await resp.blob();
+      const resp = await fetch(`${BACKEND}/api/report`);
+      if (!resp.ok) {
+        const msg = await parseErrorBody(resp);
+        showToast(msg.length > 80 ? msg.slice(0, 80) + "…" : msg);
+        return;
+      }
+      const data = await resp.json();
+      const md = data.report_markdown || "";
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `security_report_${lastTarget.replace(/[^a-z0-9]/gi, "_")}.txt`;
+      a.download = `security_report_${lastTarget.replace(/[^a-z0-9]/gi, "_")}.md`;
       a.click();
       URL.revokeObjectURL(url);
       showToast("Report downloaded!");
@@ -416,6 +503,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if (USE_STATIC_MOCK) {
     runMockScan(payload);
   } else {
-    runLiveScan(payload);
+    runApiReview(payload);
   }
 });
