@@ -1,6 +1,7 @@
+# Core — NVIDIA NIM uses OpenAI-compatible API
+openai>=1.30.0
 requests
 python-dotenv
-openai>=1.30.0
 fastapi
 uvicorn
 jinja2

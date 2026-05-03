@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecAgent — Scan results</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="page-scan">
+    <nav>
+        <div class="nav-left">
+            <a class="nav-link-back" href="index.html">← Configure</a>
+        </div>
+        <div class="nav-brand">
+            <div class="nav-icon">S</div>
+            <div>
+                <div class="nav-title">SecAgent</div>
+                <div class="nav-subtitle">NVIDIA NIM · Nemotron 3 Nano</div>
+            </div>
+        </div>
+        <div class="nav-badge nav-badge-muted">Results</div>
+    </nav>
+
+    <div class="scan-subhead fade-up">
+        <p class="scan-eyebrow">// Live analysis</p>
+        <h1 class="scan-title">Target</h1>
+        <p class="scan-target" id="scan-target-label">—</p>
+        <p class="scan-hint">Static preview: results are sample data until the API is connected. Set <code>USE_STATIC_MOCK = false</code> in <code>scan.js</code> when the backend is ready.</p>
+    </div>
+
+    <div class="scanner-wrap">
+        <div class="console-wrap" id="console-wrap" style="display:block">
+            <div class="console-header">
+                <div class="console-dot" id="console-dot"></div>
+                <div class="console-title">// Live Scan Output</div>
+                <div class="console-status" id="console-status">SCANNING...</div>
+            </div>
+            <div class="console" id="console-out"></div>
+        </div>
+
+        <div class="results-wrap fade-up" id="results-wrap" style="display:none"></div>
+    </div>
+
+    <div class="ticker">
+        <span class="ticker-inner">
+        SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·&nbsp;&nbsp;&nbsp;&nbsp;SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·
+        </span>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script src="scan.js"></script>
+</body>
+</html>

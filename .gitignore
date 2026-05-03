@@ -8,6 +8,7 @@ __pycache__/
 .venv/
 venv/
 env/
+.evn
 
 # Secrets / local config
 .env
@@ -23,3 +24,6 @@ audit_logs/*.jsonl
 .DS_Store
 .vscode/
 .idea/
+
+# Cursor / Claude local project config
+.claude/
