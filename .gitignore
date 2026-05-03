@@ -6,3 +6,12 @@ venv/
 env/
 .evn
 .venv
+
+# Local editor / OS files
+.DS_Store
+.claude/
+
+# Frontend local build artifacts
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
