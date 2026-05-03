@@ -63,16 +63,57 @@ function severityToUi(sev) {
   return "LOW";
 }
 
+function calculateRiskMeta(findings) {
+  const counts = {
+    high: 0,
+    medium: 0,
+    low: 0,
+    info: 0,
+    unknown: 0,
+  };
+
+  for (const finding of findings || []) {
+    const severity = String(finding.severity || "unknown").toLowerCase();
+
+    if (severity === "high") {
+      counts.high += 1;
+    } else if (severity === "medium") {
+      counts.medium += 1;
+    } else if (severity === "low") {
+      counts.low += 1;
+    } else if (severity === "info" || severity === "informational") {
+      counts.info += 1;
+    } else {
+      counts.unknown += 1;
+    }
+  }
+
+  const score = Math.min(
+    100,
+    counts.high * 15 +
+      counts.medium * 7 +
+      counts.low * 3 +
+      counts.info * 1 +
+      counts.unknown * 2
+  );
+
+  let level = "LOW";
+  if (score >= 70 || counts.high > 0) {
+    level = "HIGH";
+  } else if (score >= 35 || counts.medium > 0) {
+    level = "MEDIUM";
+  }
+
+  return {
+    score,
+    level,
+    counts,
+    formula: "Risk score = HIGH×15 + MEDIUM×7 + LOW×3 + INFO×1, capped at 100.",
+  };
+}
+
 function riskScoreFromFindings(findings) {
-  if (!findings || !findings.length) return 0;
-  const rank = { low: 1, medium: 2, high: 3, info: 0 };
-  let maxR = 0;
-  findings.forEach((f) => {
-    const r = rank[String(f.severity || "low").toLowerCase()] ?? 1;
-    if (r > maxR) maxR = r;
-  });
-  const base = maxR === 3 ? 72 : maxR === 2 ? 48 : maxR === 1 ? 28 : 12;
-  return Math.min(95, base + Math.min(findings.length * 3, 18));
+  return calculateRiskMeta(findings).score;
 }
 
 /**
@@ -122,12 +163,17 @@ function mapApiResponseToViewModel(apiJson) {
   const scannedAt =
     (findings[0] && findings[0].created_at) || new Date().toISOString();
 
+  const riskMeta = calculateRiskMeta(findings);
+
   return {
     target: targetUrl,
     summary,
-    risk_score: riskScoreFromFindings(findings),
+    risk_score: riskMeta.score,
+    risk_level: riskMeta.level,
+    risk_counts: riskMeta.counts,
+    risk_formula: riskMeta.formula,
     scanned_at: scannedAt,
-    model_used: "Nemotron VM Fix Agent (read-only API)",
+    model_used: "Nemotron Controlled VM Audit Agent (Live API)",
     vulnerabilities,
     secure_coding_tips: tips.slice(0, 6),
   };
@@ -290,8 +336,9 @@ async function runApiReview(payload) {
 function renderResults(result) {
   const wrap = document.getElementById("results-wrap");
   const vulns = result.vulnerabilities || [];
-  const risk = result.risk_score || 0;
-  const rc = risk >= 70 ? "high" : risk >= 40 ? "medium" : "";
+  const risk = Number(result.risk_score || 0);
+  const riskLevel = result.risk_level || (risk >= 70 ? "HIGH" : risk >= 35 ? "MEDIUM" : "LOW");
+  const rc = riskLevel === "HIGH" ? "high" : riskLevel === "MEDIUM" ? "medium" : "";
 
   const icons = {
     SQL_INJECTION: "💉",
@@ -316,7 +363,7 @@ function renderResults(result) {
     <div>
       <div class="risk-label">Risk Score</div>
       <div class="risk-num ${rc}">${risk}</div>
-      <div style="font-family:var(--mono);font-size:9px;color:var(--muted)">/100</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--muted)">/100 · ${esc(riskLevel)} RISK</div>
     </div>
     <div class="risk-center">
       <div class="risk-target">// ${esc(result.target || lastTarget)}</div>
@@ -324,6 +371,9 @@ function renderResults(result) {
       <div class="risk-summary">${esc(result.summary || "")}</div>
       <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px">
         Scanned: ${result.scanned_at || ""} &nbsp;·&nbsp; Model: ${result.model_used || ""}
+      </div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">
+        ${esc(result.risk_formula || "Risk score is severity-weighted and capped at 100.")}
       </div>
     </div>
     <div class="risk-right">
