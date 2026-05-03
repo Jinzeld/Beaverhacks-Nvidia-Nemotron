@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecAgent — NVIDIA Nemotron Security Scanner</title>
+    <link rel="stylesheet" href="styles.css">
+
+</head>
+<body>
+    <!-- NAV -->
+    <nav>
+    <div class="nav-brand">
+        <div class="nav-icon">S</div>
+        <div>
+        <div class="nav-title">SecAgent</div>
+        <div class="nav-subtitle">NVIDIA NIM · Nemotron 3 Nano</div>
+        </div>
+    </div>
+    <div class="nav-badge">BeaverHacks 2026</div>
+    </nav>
+    
+    <!-- HERO -->
+    <div class="hero fade-up">
+    <div class="hero-eyebrow"><span class="eyebrow-line"></span>AI-Powered Web Vulnerability Scanner<span class="eyebrow-line"></span></div>
+    <h1>Scan any<br><em>URL</em> or <em>IP.</em></h1>
+    <p>Enter a website or IP address. Nemotron analyzes it for SQL Injection, XSS, misconfigurations, exposed ports, and more.</p>
+    </div>
+    
+    <!-- SCANNER -->
+    <div class="scanner-wrap">
+    <div class="scanner-card fade-up delay-1">
+    
+        <label class="scanner-label">// Target URL or IP Address</label>
+    
+        <!-- URL INPUT -->
+        <div class="url-row">
+        <div class="url-prefix">TARGET://</div>
+        <input class="url-input" id="url-input" type="text"
+            placeholder="example.com  or  192.168.1.1"
+            onkeydown="if(event.key==='Enter') runScan()"/>
+        <button class="btn-scan" id="btn-scan" onclick="runScan()">⚡ Scan</button>
+        </div>
+    
+        <!-- SCAN OPTIONS -->
+        <label class="scanner-label">// Scan Modules</label>
+        <div class="scan-options">
+        <label class="option-chip checked" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>SQL Injection
+        </label>
+        <label class="option-chip checked" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>XSS
+        </label>
+        <label class="option-chip checked" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>Open Ports
+        </label>
+        <label class="option-chip checked" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>SSL/TLS Issues
+        </label>
+        <label class="option-chip checked" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>Exposed Headers
+        </label>
+        <label class="option-chip checked" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>Hardcoded Secrets
+        </label>
+        <label class="option-chip checked" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>Directory Traversal
+        </label>
+        <label class="option-chip" onclick="toggleChip(this)">
+            <span class="chip-dot"></span>CSRF
+        </label>
+        </div>
+    
+        <!-- MODEL + EXAMPLES -->
+        <div class="model-row">
+        <span class="model-label">Model:</span>
+        <select class="model-select" id="model-select">
+            <option value="nvidia/nemotron-3-nano-30b-a3b">Nemotron 3 Nano 30B-A3B</option>
+            <option value="nvidia/llama-3.1-nemotron-70b-instruct">Nemotron 70B Instruct</option>
+            <option value="nvidia/nemotron-4-340b-instruct">Nemotron 4 340B</option>
+        </select>
+        </div>
+    
+        <div style="margin-top:14px">
+        <span class="scanner-label" style="display:inline">// Try an example: </span>
+        <div class="examples">
+            <span class="example-tag" onclick="setExample('testphp.vulnweb.com')">testphp.vulnweb.com</span>
+            <span class="example-tag" onclick="setExample('demo.testfire.net')">demo.testfire.net</span>
+            <span class="example-tag" onclick="setExample('192.168.1.1')">192.168.1.1</span>
+            <span class="example-tag" onclick="setExample('scanme.nmap.org')">scanme.nmap.org</span>
+        </div>
+        </div>
+    </div>
+    
+    <!-- CONSOLE -->
+    <div class="console-wrap" id="console-wrap">
+        <div class="console-header">
+        <div class="console-dot" id="console-dot"></div>
+        <div class="console-title">// Live Scan Output</div>
+        <div class="console-status" id="console-status">SCANNING...</div>
+        </div>
+        <div class="console" id="console-out"></div>
+    </div>
+    
+    <!-- RESULTS -->
+    <div class="results-wrap fade-up" id="results-wrap"></div>
+    </div>
+    
+    <!-- TICKER -->
+    <div class="ticker">
+    <span class="ticker-inner">
+        SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·&nbsp;&nbsp;&nbsp;&nbsp;SQL INJECTION · XSS · OPEN PORTS · SSL/TLS · EXPOSED HEADERS · DIRECTORY TRAVERSAL · CSRF · NVIDIA NIM · NEMOTRON 3 NANO · BEAVERHACKS 2026 · CVE REFERENCES · CWE IDS · RISK SCORING ·
+    </span>
+    </div>
+    
+    <!-- TOAST -->
+    <div class="toast" id="toast"></div>
+<script src="script.js"></script>
+
+</body>
+</html>
