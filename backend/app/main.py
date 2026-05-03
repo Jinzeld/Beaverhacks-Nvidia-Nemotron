@@ -18,7 +18,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -65,6 +65,7 @@ app.add_middleware(
 
 class ReviewRequest(BaseModel):
     goal: str = "Review the controlled VM lab security posture using read-only checks."
+    target_host: Optional[str] = None
 
 
 def load_environment() -> Dict[str, str]:
@@ -78,11 +79,16 @@ def load_environment() -> Dict[str, str]:
     env_path = PROJECT_ROOT / ".env"
 
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(dotenv_path=env_path)
+
+    approved_target_host = os.getenv("APPROVED_TARGET_HOST", os.getenv("TARGET_HOST", "")).strip()
+    target_url = os.getenv("TARGET_URL", "").strip()
+    if not target_url and approved_target_host:
+        target_url = f"http://{approved_target_host}:8088"
 
     return {
-        "TARGET_URL": os.getenv("TARGET_URL", "").strip(),
-        "APPROVED_TARGET_HOST": os.getenv("APPROVED_TARGET_HOST", "").strip(),
+        "TARGET_URL": target_url,
+        "APPROVED_TARGET_HOST": approved_target_host,
         "READ_ONLY_MODE": os.getenv("READ_ONLY_MODE", "true").strip().lower(),
         "ENABLE_FIX_MODE": os.getenv("ENABLE_FIX_MODE", "false").strip().lower(),
         "ENABLE_FIREWALL_HARDENING": os.getenv(
@@ -188,12 +194,19 @@ def run_review(request: ReviewRequest) -> Dict[str, Any]:
     reset_trace_file(trace_path)
     trace_logger = AgentTraceLogger(trace_path)
 
+    approved_host = request.target_host or env["APPROVED_TARGET_HOST"]
+    target_url = env["TARGET_URL"]
+    if request.target_host:
+        target_url = f"http://{request.target_host}:8088"
+
     try:
         agent_result = run_agentic_security_review(
             goal=request.goal,
-            target_url=env["TARGET_URL"],
-            approved_target_host=env["APPROVED_TARGET_HOST"],
+            target_url=target_url,
+            approved_target_host=approved_host,
             trace_logger=trace_logger,
+            report_path=REPORTS_DIR / "report.md",
+            trace_path=trace_path,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

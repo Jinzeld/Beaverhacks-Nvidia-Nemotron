@@ -12,11 +12,10 @@ Current Phase:
 - Writes audit_logs/agent_trace.jsonl
 
 It does NOT:
-- use Nemotron yet
 - modify Nginx
 - modify firewall settings
 - modify Windows VM
-- run shell commands
+- run arbitrary shell commands
 """
 
 from __future__ import annotations
@@ -58,11 +57,16 @@ def load_environment() -> Dict[str, str]:
     env_path = PROJECT_ROOT / ".env"
 
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(dotenv_path=env_path)
+
+    approved_target_host = os.getenv("APPROVED_TARGET_HOST", os.getenv("TARGET_HOST", "")).strip()
+    target_url = os.getenv("TARGET_URL", "").strip()
+    if not target_url and approved_target_host:
+        target_url = f"http://{approved_target_host}:8088"
 
     return {
-        "TARGET_URL": os.getenv("TARGET_URL", "").strip(),
-        "APPROVED_TARGET_HOST": os.getenv("APPROVED_TARGET_HOST", "").strip(),
+        "TARGET_URL": target_url,
+        "APPROVED_TARGET_HOST": approved_target_host,
         "READ_ONLY_MODE": os.getenv("READ_ONLY_MODE", "true").strip().lower(),
         "ENABLE_FIX_MODE": os.getenv("ENABLE_FIX_MODE", "false").strip().lower(),
         "ENABLE_FIREWALL_HARDENING": os.getenv(
@@ -207,7 +211,7 @@ def print_agent_result(agent_result: object, output_path: Path, trace_path: Path
     print("Safety result:")
     print("- Read-only workflow completed.")
     print("- No system changes were made.")
-    print("- No shell commands were executed.")
+    print("- Only backend-controlled read-only tools were executed.")
     print("- Windows VM was not modified.")
 
 

@@ -1,18 +1,8 @@
 """
 Finding model for Nemotron VM Fix Agent.
 
-This module defines the structured security finding format used across the MVP.
-
-Why structured findings matter:
-- The backend can save them as JSON.
-- Nemotron can safely analyze them later.
-- The report generator can render them into Markdown.
-- The dashboard can display them consistently.
-
-This module is deterministic and read-only.
-It does not call Nemotron.
-It does not execute commands.
-It does not modify systems.
+This module defines one structured finding schema shared by all safe read-only
+backend tools. Tools produce facts; Nemotron may later reason over those facts.
 """
 
 from __future__ import annotations
@@ -35,13 +25,7 @@ RemediationType = Literal[
 @dataclass(frozen=True)
 class Finding:
     """
-    One security finding produced by a backend-controlled tool.
-
-    remediation_type explains what kind of action is appropriate:
-    - informational: useful context only
-    - review-required: human should review before any action
-    - report-only: should be documented, not automatically fixed
-    - remediable: may be fixable later through approval-gated workflow
+    One security finding produced by a backend-controlled read-only tool.
     """
 
     finding_id: str
@@ -56,12 +40,10 @@ class Finding:
     created_at: str
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert the finding into JSON-serializable data."""
         return asdict(self)
 
 
 def utc_now_iso() -> str:
-    """Return current UTC time in ISO format for finding timestamps."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -72,12 +54,7 @@ def missing_header_finding(
     severity: Severity,
     recommendation: str,
 ) -> Finding:
-    """
-    Build a Finding for a missing HTTP security header.
-    """
-
     normalized_id = header_name.lower().replace("-", "_")
-
     return Finding(
         finding_id=f"http_missing_{normalized_id}",
         title=f"Missing {header_name}",
@@ -92,18 +69,7 @@ def missing_header_finding(
     )
 
 
-def wildcard_cors_finding(
-    *,
-    target_url: str,
-    header_value: str,
-) -> Finding:
-    """
-    Build a Finding for wildcard CORS.
-
-    In this controlled demo, wildcard CORS is considered remediable because
-    our optional stretch fix can replace it with a trusted origin later.
-    """
-
+def wildcard_cors_finding(*, target_url: str, header_value: str) -> Finding:
     return Finding(
         finding_id="http_wildcard_cors",
         title="Wildcard CORS detected",
@@ -117,9 +83,98 @@ def wildcard_cors_finding(
         affected_target=target_url,
         recommendation=(
             "Replace wildcard CORS with a specific trusted origin. "
-            "For this controlled demo, use the trusted VM origin. "
             "For production, use the real trusted application origin."
         ),
         remediation_type="remediable",
+        created_at=utc_now_iso(),
+    )
+
+
+def anonymous_ftp_finding(*, target_host: str, port: int, evidence: str) -> Finding:
+    return Finding(
+        finding_id="ftp_anonymous_login_enabled",
+        title="Anonymous FTP login enabled",
+        category="ftp_misconfiguration",
+        severity="medium",
+        status="open",
+        evidence=evidence,
+        affected_target=f"ftp://{target_host}:{port}",
+        recommendation=(
+            "Disable anonymous FTP login unless there is a documented business requirement. "
+            "Restrict FTP access to authenticated users and review exposed files."
+        ),
+        remediation_type="review-required",
+        created_at=utc_now_iso(),
+    )
+
+
+def exposed_env_finding(*, target_url: str, evidence: str) -> Finding:
+    return Finding(
+        finding_id="http_exposed_env_file",
+        title="Exposed environment file",
+        category="sensitive_file_exposure",
+        severity="high",
+        status="open",
+        evidence=evidence,
+        affected_target=target_url,
+        recommendation=(
+            "Remove .env files from the web root, deny access to dotfiles at the web server layer, "
+            "and rotate any real credentials if exposure occurred."
+        ),
+        remediation_type="remediable",
+        created_at=utc_now_iso(),
+    )
+
+
+def directory_listing_finding(*, target_url: str, evidence: str) -> Finding:
+    return Finding(
+        finding_id="http_directory_listing_enabled",
+        title="Directory listing enabled",
+        category="web_misconfiguration",
+        severity="medium",
+        status="open",
+        evidence=evidence,
+        affected_target=target_url,
+        recommendation=(
+            "Disable directory listing/autoindex and restrict direct access to internal files, "
+            "backups, and notes."
+        ),
+        remediation_type="remediable",
+        created_at=utc_now_iso(),
+    )
+
+
+def debug_endpoint_finding(*, target_url: str, evidence: str) -> Finding:
+    return Finding(
+        finding_id="http_debug_endpoint_exposure",
+        title="Debug endpoint exposes sensitive information",
+        category="debug_exposure",
+        severity="high",
+        status="open",
+        evidence=evidence,
+        affected_target=target_url,
+        recommendation=(
+            "Disable debug endpoints in production, require authentication for diagnostics, "
+            "and avoid returning secrets in API responses."
+        ),
+        remediation_type="remediable",
+        created_at=utc_now_iso(),
+    )
+
+
+def reflected_input_finding(*, target_url: str, evidence: str) -> Finding:
+    return Finding(
+        finding_id="http_reflected_user_input",
+        title="Reflected user input detected",
+        category="web_input_handling",
+        severity="medium",
+        status="open",
+        evidence=evidence,
+        affected_target=target_url,
+        recommendation=(
+            "HTML-encode user-controlled output and maintain a restrictive Content-Security-Policy. "
+            "The audit used a harmless canary string only."
+        ),
+        remediation_type="review-required",
         created_at=utc_now_iso(),
     )
